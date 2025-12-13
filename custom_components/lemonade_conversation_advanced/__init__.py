@@ -8,11 +8,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, CONF_URL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.components.conversation import ConversationEntity
 
 from .const import DOMAIN
 from .llm import LemonadeLLM
-from .conversation import async_process
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,9 +32,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # Registrar componentes secundarios
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
-    
-    # Registrar el agente de conversación personalizado
-    hass.data[DOMAIN]["config_entry"] = entry
     
     return True
 

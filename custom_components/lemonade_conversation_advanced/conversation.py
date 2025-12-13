@@ -7,30 +7,14 @@ from typing import Any, Dict, List, Optional
 from homeassistant.components.conversation import (
     ConversationInput,
     ConversationResult,
-    async_process,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import intent
-from homeassistant.components.conversation.util import format_intermediate_response
 
 from .const import DOMAIN, CONF_DEFAULT_MODEL, CONF_TEMPERATURE, CONF_MAX_TOKENS, CONF_STREAMING
 from .llm import LemonadeLLM
 
 _LOGGER = logging.getLogger(__name__)
-
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    """Set up conversation from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
-    
-    # Registrar el componente de conversación personalizado
-    hass.data[DOMAIN]["config_entry"] = entry
-    
-    return True
 
 async def async_process(
     hass: HomeAssistant,
@@ -103,24 +87,4 @@ async def async_process(
         return ConversationResult(
             response="Ha ocurrido un error al procesar tu solicitud.",
             conversation_id=conversation_input.conversation_id
-        )
-
-class LemonadeConversationEntity(ConversationEntity):
-    """Lemonade Conversation Entity."""
-
-    def __init__(self, entry: ConfigEntry) -> None:
-        """Initialize the agent."""
-        self.entry = entry
-        self._attr_name = "Lemonade Assistant"
-        self._attr_unique_id = f"{DOMAIN}_conversation"
-
-    async def async_process(self, user_input: ConversationInput) -> ConversationResult:
-        """Process a conversation request."""
-        config = self.entry.data
-        
-        # Llamar al proceso de conversación
-        return await async_process(
-            self.hass,
-            config,
-            user_input
         )

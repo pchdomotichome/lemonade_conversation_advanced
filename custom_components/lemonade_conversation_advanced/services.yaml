@@ -1,4 +1,4 @@
-# Servicios personalizados para Lemonade Assistant Advanced
+# Servicios personalizados para Lemonade Conversation Advanced
 
 load_model:
   name: Load Model
@@ -8,4 +8,4 @@ load_model:
       name: Model Name
       description: Name of the model to load
       required: true
-      example: "Llama-3.2-1B-Instruct-Hybrid"
+      example: "user.Dolphin3.0-Llama3.2-3B-GGUF"
