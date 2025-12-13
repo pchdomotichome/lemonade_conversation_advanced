@@ -1,6 +1,8 @@
 {
   "name": "Lemonade Conversation Advanced",
   "content_in_root": false,
+  "homeassistant": "2025.7",
+  "hacs": "2.0.5",
   "version": "0.1.0",
   "render_readme": true,
   "country": "AR"
