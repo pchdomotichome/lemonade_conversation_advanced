@@ -1,10 +1,12 @@
-"""Config flow for Lemonade Assistant Advanced integration."""
+"""Config flow for Lemonade Conversation Advanced integration."""
 from __future__ import annotations
 
 import logging
 from typing import Any
 
 import voluptuous as vol
+import aiohttp  # Importar aiohttp aquí
+
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
@@ -15,7 +17,7 @@ from .const import DOMAIN, CONF_SERVER_URL, CONF_DEFAULT_MODEL, CONF_TEMPERATURE
 _LOGGER = logging.getLogger(__name__)
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Lemonade Assistant Advanced."""
+    """Handle a config flow for Lemonade Conversation Advanced."""
 
     VERSION = 1
 
@@ -28,7 +30,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Validar conexión con Lemonade Server
                 await self._test_connection(user_input)
                 return self.async_create_entry(
-                    title="Lemonade Assistant Advanced", 
+                    title="Lemonade Conversation Advanced", 
                     data=user_input
                 )
             except CannotConnect:

@@ -1,4 +1,4 @@
-"""Sensor for Lemonade Assistant Advanced."""
+"""Sensor for Lemonade Conversation Advanced."""
 from __future__ import annotations
 
 import logging

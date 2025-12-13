@@ -1,4 +1,4 @@
-"""LLM handling for Lemonade Assistant Advanced."""
+"""LLM handling for Lemonade Conversation Advanced."""
 from __future__ import annotations
 
 import logging

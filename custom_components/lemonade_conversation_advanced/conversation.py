@@ -1,4 +1,4 @@
-"""Conversation integration for Lemonade Assistant Advanced."""
+"""Conversation integration for Lemonade Conversation Advanced."""
 from __future__ import annotations
 
 import logging
@@ -7,11 +7,9 @@ from typing import Any, Dict, List, Optional
 from homeassistant.components.conversation import (
     ConversationInput,
     ConversationResult,
-    async_process,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import intent
 
 from .const import DOMAIN, CONF_DEFAULT_MODEL, CONF_TEMPERATURE, CONF_MAX_TOKENS, CONF_STREAMING
 from .llm import LemonadeLLM

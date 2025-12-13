@@ -1,4 +1,4 @@
-"""Integration for Lemonade Assistant Advanced."""
+"""Integration for Lemonade Conversation Advanced."""
 from __future__ import annotations
 
 import logging
@@ -15,7 +15,7 @@ from .llm import LemonadeLLM
 _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Lemonade Assistant Advanced from a config entry."""
+    """Set up Lemonade Conversation Advanced from a config entry."""
     
     # Guardar datos de configuración
     hass.data.setdefault(DOMAIN, {})
@@ -33,26 +33,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Registrar componentes secundarios
     hass.async_create_task(
         hass.config_entries.async_forward_entry_setup(entry, "sensor")
-    )
-    
-    # Registrar servicios personalizados
-    async def load_model_service(call):
-        """Servicio para cargar un modelo."""
-        model_name = call.data.get("model_name")
-        if not model_name:
-            _LOGGER.error("No model name provided for load_model service")
-            return
-            
-        try:
-            await llm.load_model(model_name)
-            _LOGGER.info(f"Model {model_name} loaded successfully")
-        except Exception as err:
-            _LOGGER.error(f"Failed to load model {model_name}: {err}")
-    
-    hass.services.async_register(
-        DOMAIN, 
-        "load_model", 
-        load_model_service
     )
     
     return True
