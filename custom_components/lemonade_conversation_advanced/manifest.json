@@ -1,0 +1,14 @@
+{
+  "domain": "lemonade_conversation_advanced",
+  "name": "Lemonade Conversation Advanced",
+  "version": "0.1.0",
+  "config_flow": true,
+  "documentation": "https://github.com/pchdomotichome/lemonade_conversation_advanced",
+  "issue_tracker": "https://github.com/pchdomotichome/lemonade_conversation_advanced/issues",
+  "requirements": ["aiohttp"],
+  "integration_type": "service",
+  "iot_class": "local_polling",
+  "dependencies": ["conversation"],
+  "after_dependencies": ["assist_pipeline", "intent"],
+  "codeowners": ["@pchdomotichome"]
+}

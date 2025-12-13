@@ -1,0 +1,11 @@
+# Servicios personalizados para Lemonade Assistant Advanced
+
+load_model:
+  name: Load Model
+  description: Load a model into memory
+  fields:
+    model_name:
+      name: Model Name
+      description: Name of the model to load
+      required: true
+      example: "Llama-3.2-1B-Instruct-Hybrid"
