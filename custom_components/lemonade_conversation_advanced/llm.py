@@ -127,3 +127,47 @@ class LemonadeLLM:
         except Exception as err:
             _LOGGER.error(f"Error getting chat completion: {err}")
             raise
+
+    async def ai_task(self, task_name: str, **kwargs) -> dict:
+        """Execute AI task through Lemonade Server."""
+        try:
+            payload = {
+                "task": task_name,
+                **kwargs
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.server_url}/api/v1/ai/task",
+                    json=payload
+                ) as resp:
+                    result = await resp.json()
+                    _LOGGER.debug(f"AI task result: {result}")
+                    return result
+        except Exception as err:
+            _LOGGER.error(f"Error executing AI task {task_name}: {err}")
+            raise
+
+    async def get_system_info(self) -> dict:
+        """Get system information from Lemonade Server."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{self.server_url}/api/v1/system-info") as resp:
+                    result = await resp.json()
+                    _LOGGER.debug(f"System info result: {result}")
+                    return result
+        except Exception as err:
+            _LOGGER.error(f"Error getting system info: {err}")
+            raise
+
+    async def get_stats(self) -> dict:
+        """Get performance statistics from Lemonade Server."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{self.server_url}/api/v1/stats") as resp:
+                    result = await resp.json()
+                    _LOGGER.debug(f"Stats result: {result}")
+                    return result
+        except Exception as err:
+            _LOGGER.error(f"Error getting stats: {err}")
+            raise
