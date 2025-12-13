@@ -30,10 +30,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error(f"Failed to connect to Lemonade Server: {err}")
         raise ConfigEntryNotReady from err
     
-    # Registrar componentes secundarios
-    hass.async_create_task(
-        hass.config_entries.async_forward_entry_setup(entry, "sensor")
-    )
+    # Registrar componentes secundarios - Corrección aquí
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
     
     return True
 
