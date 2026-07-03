@@ -140,16 +140,16 @@ class LemonadeClient:
         model_name = error_data.get("model_name") or error_data.get("model")
 
         if status == 404:
-            if "model" in message.lower():
-                return LemonadeModelNotFoundError(message, model_name)
+            if "model" in message.lower() and model_name:
+                return LemonadeModelNotFoundError(model_name)
             return LemonadeAPIError(message, status, data)
         if status == 400:
-            if "not loaded" in message.lower():
-                return LemonadeModelNotLoadedError(message, model_name)
+            if "not loaded" in message.lower() and model_name:
+                return LemonadeModelNotLoadedError(model_name)
             if "npu" in message.lower() and "busy" in message.lower():
                 return LemonadeNPUBusyError(model_name)
             if "out of memory" in message.lower() or "oom" in message.lower():
-                return LemonadeOutOfMemoryError(message)
+                return LemonadeOutOfMemoryError()
             if "backend" in message.lower():
                 backend = error_data.get("backend", message)
                 return LemonadeBackendUnavailableError(backend)
