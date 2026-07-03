@@ -39,7 +39,7 @@ PARAMETERS_SCHEMA = vol.Schema({
 })
 
 
-class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Lemonade Conversation Advanced."""
 
     VERSION = 2
