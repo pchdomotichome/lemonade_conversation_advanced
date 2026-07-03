@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfInformation
+from homeassistant.const import UnitOfInformation
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -39,7 +39,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         LemonadeSimpleSensor(coordinator, entry, SensorEntityDescription(key="health", name="Health", icon="mdi:heart-pulse"), "health"),
         LemonadeSimpleSensor(coordinator, entry, SensorEntityDescription(key="loaded_model", name="Loaded Model", icon="mdi:brain"), "loaded_model"),
         LemonadeSimpleSensor(coordinator, entry, SensorEntityDescription(key="vram_usage", name="VRAM Usage", native_unit_of_measurement=UnitOfInformation.MEGABYTES, state_class=SensorStateClass.MEASUREMENT, icon="mdi:memory"), "vram_usage"),
-        LemonadeSimpleSensor(coordinator, entry, SensorEntityDescription(key="npu_usage", name="NPU Usage", native_unit_of_measurement=PERCENTAGE, state_class=SensorStateClass.MEASUREMENT, icon="mdi:cpu-64-bit"), "npu_usage"),
+        LemonadeSimpleSensor(coordinator, entry, SensorEntityDescription(key="npu_usage", name="NPU Usage", icon="mdi:cpu-64-bit"), "npu_usage"),
         LemonadeSimpleSensor(coordinator, entry, SensorEntityDescription(key="model_count", name="Model Count", state_class=SensorStateClass.MEASUREMENT, icon="mdi:counter"), "model_count"),
         LemonadeSimpleSensor(coordinator, entry, SensorEntityDescription(key="inference_speed", name="Inference Speed", native_unit_of_measurement="tokens/s", state_class=SensorStateClass.MEASUREMENT, icon="mdi:speedometer"), "inference_speed"),
     ])
@@ -96,7 +96,9 @@ class LemonadeSimpleSensor(CoordinatorEntity[LemonadeDataCoordinator], SensorEnt
             return loaded[0].get("memory_usage_mb") if loaded else None
         if self._key == "npu_usage":
             loaded = (data.system_info or {}).get("loaded_models", [])
-            return 100 if any(model.get("device", "").lower() in ["npu", "ryzenai", "xdnn"] for model in loaded) else 0
+            if any(model.get("device", "").lower() in ["npu", "ryzenai", "xdnn"] for model in loaded):
+                return "Active"
+            return "Inactive"
         if self._key == "model_count":
             return len(data.models or [])
         if self._key == "inference_speed":

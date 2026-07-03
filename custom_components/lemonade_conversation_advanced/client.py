@@ -137,20 +137,22 @@ class LemonadeClient:
         """Convert API error to LemonadeError."""
         error_data = data.get("error", {})
         message = error_data.get("message", "Unknown error")
+        model_name = error_data.get("model_name") or error_data.get("model")
 
         if status == 404:
             if "model" in message.lower():
-                return LemonadeModelNotFoundError(message)
+                return LemonadeModelNotFoundError(message, model_name)
             return LemonadeAPIError(message, status, data)
         if status == 400:
             if "not loaded" in message.lower():
-                return LemonadeModelNotLoadedError(message)
+                return LemonadeModelNotLoadedError(message, model_name)
             if "npu" in message.lower() and "busy" in message.lower():
-                return LemonadeNPUBusyError(message)
+                return LemonadeNPUBusyError(model_name)
             if "out of memory" in message.lower() or "oom" in message.lower():
                 return LemonadeOutOfMemoryError(message)
             if "backend" in message.lower():
-                return LemonadeBackendUnavailableError(message)
+                backend = error_data.get("backend", message)
+                return LemonadeBackendUnavailableError(backend)
             return LemonadeInvalidRequestError(message)
         return LemonadeAPIError(message, status, data)
 

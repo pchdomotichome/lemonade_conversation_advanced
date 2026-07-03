@@ -92,16 +92,23 @@ async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
     async def set_default_model(call: ServiceCall) -> ServiceResponse:
         """Set default model for conversation."""
+        entry_id = call.data.get("config_entry_id", entry.entry_id)
         model_name = call.data["model_name"]
-        new_options = dict(entry.options)
+        if entry_id not in hass.data.get(DOMAIN, {}):
+            raise HomeAssistantError(f"Config entry {entry_id} not found")
+        target_entry = hass.data[DOMAIN][entry_id]["entry"]
+        new_options = dict(target_entry.options)
         new_options[CONF_DEFAULT_MODEL] = model_name
-        hass.config_entries.async_update_entry(entry, options=new_options)
+        hass.config_entries.async_update_entry(target_entry, options=new_options)
+        await hass.config_entries.async_reload(entry_id)
         return {"success": True, "model": model_name}
 
     async def query_image(call: ServiceCall) -> ServiceResponse:
         """Analyze an image with a vision-capable model."""
+        entry_id = call.data.get("config_entry_id", entry.entry_id)
         backend = get_backend(call)
-        model = call.data.get("model") or entry.options.get(CONF_DEFAULT_MODEL)
+        target_entry = hass.data[DOMAIN][entry_id]["entry"]
+        model = call.data.get("model") or target_entry.options.get(CONF_DEFAULT_MODEL)
         if not model:
             raise HomeAssistantError("No model specified and no default model configured")
         messages = [
@@ -120,8 +127,12 @@ async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
     async def update_config(call: ServiceCall) -> ServiceResponse:
         """Update integration configuration at runtime."""
-        new_data = dict(entry.data)
-        new_options = dict(entry.options)
+        entry_id = call.data.get("config_entry_id", entry.entry_id)
+        if entry_id not in hass.data.get(DOMAIN, {}):
+            raise HomeAssistantError(f"Config entry {entry_id} not found")
+        target_entry = hass.data[DOMAIN][entry_id]["entry"]
+        new_data = dict(target_entry.data)
+        new_options = dict(target_entry.options)
         for key, target in [
             (CONF_SERVER_URL, new_data),
             (CONF_API_KEY, new_data),
@@ -132,8 +143,8 @@ async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
         ]:
             if key in call.data:
                 target[key] = call.data[key]
-        hass.config_entries.async_update_entry(entry, data=new_data, options=new_options)
-        await hass.config_entries.async_reload(entry.entry_id)
+        hass.config_entries.async_update_entry(target_entry, data=new_data, options=new_options)
+        await hass.config_entries.async_reload(entry_id)
         return {"success": True, "message": "Configuration updated"}
 
     service_schema_with_entry = {vol.Required("config_entry_id"): cv.string}

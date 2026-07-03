@@ -4,41 +4,243 @@
     "step": {
       "user": {
         "title": "Connect to Lemonade Server",
-        "description": "Enter the Lemonade Server URL.",
+        "description": "Enter the Lemonade Server URL and optional API key.",
         "data": {
           "server_url": "Server URL",
-          "api_key": "API Key"
+          "api_key": "API Key (optional)"
         }
       },
       "model": {
-        "title": "Select model",
+        "title": "Select Model",
+        "description": "Choose a model to use for conversation.",
         "data": {
-          "default_model": "Default model"
+          "default_model": "Model"
         }
       },
       "parameters": {
-        "title": "Model parameters",
+        "title": "Model Parameters",
+        "description": "Configure model parameters.",
         "data": {
           "temperature": "Temperature",
-          "max_tokens": "Max tokens",
-          "streaming": "Streaming"
+          "max_tokens": "Max Tokens",
+          "streaming": "Enable Streaming"
         }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect to Lemonade Server",
-      "no_models": "No models were found"
+      "invalid_auth": "Invalid API key",
+      "no_models": "No models available"
+    },
+    "abort": {
+      "already_configured": "This server is already configured"
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Lemonade options",
+        "title": "Lemonade Conversation Advanced Options",
+        "description": "Configure model parameters and behavior.",
         "data": {
           "temperature": "Temperature",
-          "max_tokens": "Max tokens",
-          "streaming": "Streaming",
-          "default_model": "Default model"
+          "max_tokens": "Max Tokens",
+          "streaming": "Enable Streaming",
+          "default_model": "Default Model"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "lemonade_health": {
+        "name": "Lemonade Server Health",
+        "state": {
+          "healthy": "Healthy",
+          "unhealthy": "Unhealthy",
+          "unknown": "Unknown"
+        }
+      },
+      "lemonade_loaded_model": {
+        "name": "Loaded Model"
+      },
+      "lemonade_vram_usage": {
+        "name": "VRAM Usage"
+      },
+      "lemonade_npu_usage": {
+        "name": "NPU Usage"
+      },
+      "lemonade_model_count": {
+        "name": "Model Count"
+      },
+      "lemonade_inference_speed": {
+        "name": "Inference Speed"
+      }
+    }
+  },
+  "services": {
+    "load_model": {
+      "name": "Load Model",
+      "description": "Load a model into memory",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config Entry",
+          "description": "Config entry to use"
+        },
+        "model_name": {
+          "name": "Model Name",
+          "description": "Name of the model to load"
+        },
+        "ctx_size": {
+          "name": "Context Size",
+          "description": "Context window size"
+        },
+        "gpu_layers": {
+          "name": "GPU Layers",
+          "description": "Number of layers to offload to GPU"
+        },
+        "backend": {
+          "name": "Backend",
+          "description": "Backend to use"
+        }
+      }
+    },
+    "unload_model": {
+      "name": "Unload Model",
+      "description": "Unload a model from memory",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config Entry",
+          "description": "Config entry to use"
+        },
+        "model_name": {
+          "name": "Model Name",
+          "description": "Name of the model to unload (use 'all' for all)"
+        }
+      }
+    },
+    "pull_model": {
+      "name": "Pull Model",
+      "description": "Download a model from registry",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config Entry",
+          "description": "Config entry to use"
+        },
+        "model_name": {
+          "name": "Model Name",
+          "description": "Name of the model to pull"
+        },
+        "checkpoint": {
+          "name": "Checkpoint",
+          "description": "Specific checkpoint/branch"
+        },
+        "recipe": {
+          "name": "Recipe",
+          "description": "Model recipe to use"
+        }
+      }
+    },
+    "list_models": {
+      "name": "List Models",
+      "description": "List available models",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config Entry",
+          "description": "Config entry to use"
+        },
+        "show_all": {
+          "name": "Show All",
+          "description": "Include not downloaded models"
+        }
+      }
+    },
+    "get_system_info": {
+      "name": "Get System Info",
+      "description": "Get system information",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config Entry",
+          "description": "Config entry to use"
+        }
+      }
+    },
+    "get_stats": {
+      "name": "Get Stats",
+      "description": "Get performance statistics",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config Entry",
+          "description": "Config entry to use"
+        }
+      }
+    },
+    "set_default_model": {
+      "name": "Set Default Model",
+      "description": "Set default conversation model",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config Entry",
+          "description": "Config entry to use"
+        },
+        "model_name": {
+          "name": "Model Name",
+          "description": "Name of the model to set as default"
+        }
+      }
+    },
+    "query_image": {
+      "name": "Query Image",
+      "description": "Analyze an image with vision model",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config Entry",
+          "description": "Config entry to use"
+        },
+        "image_url": {
+          "name": "Image URL",
+          "description": "URL or path to image"
+        },
+        "prompt": {
+          "name": "Prompt",
+          "description": "Question about the image"
+        },
+        "model": {
+          "name": "Model",
+          "description": "Vision model to use"
+        }
+      }
+    },
+    "update_config": {
+      "name": "Update Config",
+      "description": "Update integration config at runtime",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config Entry",
+          "description": "Config entry to use"
+        },
+        "server_url": {
+          "name": "Server URL",
+          "description": "New Lemonade Server URL"
+        },
+        "api_key": {
+          "name": "API Key",
+          "description": "New API key"
+        },
+        "default_model": {
+          "name": "Default Model",
+          "description": "New default model"
+        },
+        "temperature": {
+          "name": "Temperature",
+          "description": "New default temperature"
+        },
+        "max_tokens": {
+          "name": "Max Tokens",
+          "description": "New default max tokens"
+        },
+        "streaming": {
+          "name": "Streaming",
+          "description": "Enable streaming responses"
         }
       }
     }
