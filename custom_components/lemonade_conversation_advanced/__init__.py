@@ -67,12 +67,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     }
 
     # Register LLM API
-    from homeassistant.components import llm as llm_integration
+    from homeassistant.components.llm import async_register_api
     from .llm_api import LemonadeLLMAPI
 
     llm_api = LemonadeLLMAPI(hass, entry, backend)
     hass.data[DOMAIN][entry.entry_id]["llm_api"] = llm_api
-    llm_integration.async_register_api(hass, llm_api)
+    async_register_api(hass, llm_api)
 
     # Forward setup to platforms
     await hass.config_entries.async_forward_entry_setups(entry, ["conversation", "sensor", "ai_task"])
@@ -95,8 +95,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await async_unload_services(hass, entry)
 
     # Unregister LLM API
-    from homeassistant.components import llm as llm_integration
-    llm_integration.async_unregister_api(hass, LLM_API_NAME)
+    from homeassistant.components.llm import async_unregister_api
+    async_unregister_api(hass, LLM_API_NAME)
 
     # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(

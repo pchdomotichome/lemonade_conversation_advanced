@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
-from homeassistant.components import conversation, llm
+from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry
 
 from .backends.openai_compat import LemonadeOpenAICompatBackend
