@@ -15,7 +15,8 @@
   ],
   "after_dependencies": [
     "assist_pipeline",
-    "intent"
+    "intent",
+    "llm"
   ],
   "iot_class": "local_polling",
   "codeowners": [
