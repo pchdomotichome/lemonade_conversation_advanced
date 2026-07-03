@@ -5,10 +5,21 @@
   "config_flow": true,
   "documentation": "https://github.com/pchdomotichome/lemonade_conversation_advanced",
   "issue_tracker": "https://github.com/pchdomotichome/lemonade_conversation_advanced/issues",
-  "requirements": ["aiohttp"],
+  "requirements": [
+    "openai>=1.0.0",
+    "voluptuous-openapi"
+  ],
+  "dependencies": [
+    "conversation",
+    "ai_task"
+  ],
+  "after_dependencies": [
+    "assist_pipeline",
+    "intent"
+  ],
   "integration_type": "service",
   "iot_class": "local_polling",
-  "dependencies": ["conversation"],
-  "after_dependencies": ["assist_pipeline", "intent"],
-  "codeowners": ["@pchdomotichome"]
+  "codeowners": [
+    "@pchdomotichome"
+  ]
 }

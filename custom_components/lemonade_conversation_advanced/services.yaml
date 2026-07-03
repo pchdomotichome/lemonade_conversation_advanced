@@ -1,11 +1,116 @@
-# Servicios personalizados para Lemonade Conversation Advanced
+# Services for Lemonade Conversation Advanced
 
 load_model:
-  name: Load Model
-  description: Load a model into memory
+  name: "Load Model"
+  description: "Load a model into memory for inference"
   fields:
-    model_name:
-      name: Model Name
-      description: Name of the model to load
+    config_entry_id:
+      name: "Config Entry ID"
       required: true
-      example: "user.Dolphin3.0-Llama3.2-3B-GGUF"
+    model_name:
+      name: "Model Name"
+      required: true
+      example: "user.Llama-3.2-1B-Instruct-GGUF"
+    ctx_size:
+      name: "Context Size"
+      required: false
+      example: 8192
+    gpu_layers:
+      name: "GPU Layers"
+      required: false
+      example: -1
+    backend:
+      name: "Backend"
+      required: false
+      example: "llamacpp"
+
+unload_model:
+  name: "Unload Model"
+  description: "Unload a model from memory"
+  fields:
+    config_entry_id:
+      name: "Config Entry ID"
+      required: true
+    model_name:
+      name: "Model Name"
+      required: true
+
+pull_model:
+  name: "Pull Model"
+  description: "Download/pull a model"
+  fields:
+    config_entry_id:
+      name: "Config Entry ID"
+      required: true
+    model_name:
+      name: "Model Name"
+      required: true
+    checkpoint:
+      name: "Checkpoint"
+      required: false
+    recipe:
+      name: "Recipe"
+      required: false
+
+list_models:
+  name: "List Models"
+  description: "List available models"
+  fields:
+    config_entry_id:
+      name: "Config Entry ID"
+      required: true
+    show_all:
+      name: "Show All"
+      required: false
+
+get_system_info:
+  name: "Get System Info"
+  description: "Get system information"
+  fields:
+    config_entry_id:
+      name: "Config Entry ID"
+      required: true
+
+get_stats:
+  name: "Get Stats"
+  description: "Get performance statistics"
+  fields:
+    config_entry_id:
+      name: "Config Entry ID"
+      required: true
+
+set_default_model:
+  name: "Set Default Model"
+  description: "Set the default model"
+  fields:
+    config_entry_id:
+      name: "Config Entry ID"
+      required: true
+    model_name:
+      name: "Model Name"
+      required: true
+
+query_image:
+  name: "Query Image"
+  description: "Analyze an image"
+  fields:
+    config_entry_id:
+      name: "Config Entry ID"
+      required: true
+    image_url:
+      name: "Image URL"
+      required: true
+    prompt:
+      name: "Prompt"
+      required: true
+    model:
+      name: "Model"
+      required: false
+
+update_config:
+  name: "Update Configuration"
+  description: "Update integration configuration"
+  fields:
+    config_entry_id:
+      name: "Config Entry ID"
+      required: true

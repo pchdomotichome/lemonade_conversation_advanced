@@ -1,0 +1,46 @@
+{
+  "title": "Lemonade Conversation Advanced",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Lemonade Server",
+        "description": "Enter the Lemonade Server URL.",
+        "data": {
+          "server_url": "Server URL",
+          "api_key": "API Key"
+        }
+      },
+      "model": {
+        "title": "Select model",
+        "data": {
+          "default_model": "Default model"
+        }
+      },
+      "parameters": {
+        "title": "Model parameters",
+        "data": {
+          "temperature": "Temperature",
+          "max_tokens": "Max tokens",
+          "streaming": "Streaming"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Lemonade Server",
+      "no_models": "No models were found"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Lemonade options",
+        "data": {
+          "temperature": "Temperature",
+          "max_tokens": "Max tokens",
+          "streaming": "Streaming",
+          "default_model": "Default model"
+        }
+      }
+    }
+  }
+}

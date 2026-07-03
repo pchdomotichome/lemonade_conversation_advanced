@@ -1,90 +1,137 @@
-"""Conversation integration for Lemonade Conversation Advanced."""
+"""Conversation agent for Lemonade Conversation Advanced."""
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from homeassistant.components.conversation import (
-    ConversationInput,
-    ConversationResult,
-)
+from homeassistant.components import conversation, llm
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, CONF_DEFAULT_MODEL, CONF_TEMPERATURE, CONF_MAX_TOKENS, CONF_STREAMING
-from .llm import LemonadeLLM
+from .backends.openai_compat import LemonadeOpenAICompatBackend
+from .const import CONF_DEFAULT_MODEL, CONF_MAX_TOKENS, CONF_STREAMING, CONF_TEMPERATURE, DOMAIN
+from .utils import strip_thinking_blocks
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_process(
-    hass: HomeAssistant,
-    config: Dict[str, Any],
-    conversation_input: ConversationInput,
-) -> ConversationResult:
-    """Process a conversation."""
-    
-    server_url = config.get("server_url")
-    default_model = config.get(CONF_DEFAULT_MODEL)
-    temperature = config.get(CONF_TEMPERATURE, 0.7)
-    max_tokens = config.get(CONF_MAX_TOKENS, 512)
-    streaming = config.get(CONF_STREAMING, True)
-    
-    llm = LemonadeLLM(hass, server_url)
-    
-    # Construir mensajes para la conversación
-    messages = []
-    
-    # Agregar sistema de contexto si está disponible
-    if conversation_input.agent_info.system_prompt:
-        messages.append({
-            "role": "system",
-            "content": conversation_input.agent_info.system_prompt
-        })
-    
-    # Agregar historial de conversación limitado
-    conversation_history = conversation_input.conversation_history or []
-    max_history = 10  # Limitar a 10 mensajes para evitar overflow
-    
-    for msg in conversation_history[-max_history:]:
-        messages.append({
-            "role": msg.role,
-            "content": msg.content
-        })
-    
-    # Agregar mensaje actual
-    messages.append({
-        "role": "user",
-        "content": conversation_input.text
-    })
-    
-    try:
-        # Llamar al servidor Lemonade
-        response = await llm.chat_completion(
-            model=default_model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            stream=streaming
-        )
-        
-        # Procesar respuesta
-        if "choices" in response and len(response["choices"]) > 0:
-            content = response["choices"][0]["message"]["content"]
-            
-            return ConversationResult(
-                response=content,
-                conversation_id=conversation_input.conversation_id
+
+class LemonadeConversationAgent(conversation.ConversationEntity, conversation.AbstractConversationAgent):
+    """Lemonade Conversation Agent."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Lemonade Assistant"
+
+    def __init__(self, entry: ConfigEntry, backend: LemonadeOpenAICompatBackend) -> None:
+        """Initialize the agent."""
+        self.entry = entry
+        self.backend = backend
+        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_agent"
+        self._attr_supported_features = conversation.ConversationEntityFeature.CONTROL
+
+    @property
+    def supported_features(self) -> int:
+        """Return supported features."""
+        return self._attr_supported_features
+
+    @property
+    def device_info(self) -> Dict[str, Any] | None:
+        """Return device info."""
+        return {
+            "identifiers": {(DOMAIN, self.unique_id)},
+            "name": self.name,
+            "manufacturer": "AMD",
+            "model": "Lemonade Server",
+        }
+
+    async def async_process(self, user_input: conversation.ConversationInput) -> conversation.ConversationResult:
+        """Process a conversation request."""
+        config = self.entry.data
+        options = self.entry.options
+        model = options.get(CONF_DEFAULT_MODEL, config.get(CONF_DEFAULT_MODEL))
+        temperature = options.get(CONF_TEMPERATURE, 0.7)
+        max_tokens = options.get(CONF_MAX_TOKENS, 512)
+        streaming = options.get(CONF_STREAMING, True)
+
+        messages = []
+        system_prompt = getattr(user_input.agent_info, "system_prompt", None)
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": user_input.text})
+
+        try:
+            response = await self.backend.chat_completion(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=streaming,
             )
-        else:
-            _LOGGER.error("No choices returned from Lemonade Server")
-            return ConversationResult(
-                response="Lo siento, no pude procesar tu solicitud.",
-                conversation_id=conversation_input.conversation_id
+            if streaming:
+                return await self._process_streaming_response(response, user_input.conversation_id)
+            return self._process_response(response, user_input.conversation_id)
+        except Exception as err:
+            _LOGGER.error("Error processing conversation: %s", err)
+            return conversation.ConversationResult(
+                response=conversation.ConversationResponse(
+                    response_type=conversation.ConversationResponseType.ERROR,
+                    error_code="unknown",
+                    message=f"Error processing request: {err}",
+                ),
+                conversation_id=user_input.conversation_id,
             )
-            
-    except Exception as err:
-        _LOGGER.error(f"Error processing conversation: {err}")
-        return ConversationResult(
-            response="Ha ocurrido un error al procesar tu solicitud.",
-            conversation_id=conversation_input.conversation_id
+
+    def _process_response(self, response: Any, conversation_id: str | None) -> conversation.ConversationResult:
+        """Process non-streaming response."""
+        try:
+            if hasattr(response, "choices") and response.choices:
+                content = response.choices[0].message.content or ""
+                content = strip_thinking_blocks(content)
+                return conversation.ConversationResult(
+                    response=conversation.ConversationResponse(
+                        response_type=conversation.ConversationResponseType.ACTION_DONE,
+                        speech={"plain": {"speech": content, "extra_data": None}},
+                    ),
+                    conversation_id=conversation_id,
+                )
+        except Exception as err:
+            _LOGGER.error("Error parsing response: %s", err)
+        return conversation.ConversationResult(
+            response=conversation.ConversationResponse(
+                response_type=conversation.ConversationResponseType.ERROR,
+                error_code="unknown",
+                message="Failed to parse response",
+            ),
+            conversation_id=conversation_id,
         )
+
+    async def _process_streaming_response(self, stream: Any, conversation_id: str | None) -> conversation.ConversationResult:
+        """Process streaming response."""
+        try:
+            full_content = ""
+            async for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    full_content += chunk.choices[0].delta.content
+            full_content = strip_thinking_blocks(full_content)
+            return conversation.ConversationResult(
+                response=conversation.ConversationResponse(
+                    response_type=conversation.ConversationResponseType.ACTION_DONE,
+                    speech={"plain": {"speech": full_content, "extra_data": None}},
+                ),
+                conversation_id=conversation_id,
+            )
+        except Exception as err:
+            _LOGGER.error("Error processing streaming response: %s", err)
+            return conversation.ConversationResult(
+                response=conversation.ConversationResponse(
+                    response_type=conversation.ConversationResponseType.ERROR,
+                    error_code="unknown",
+                    message=f"Streaming error: {err}",
+                ),
+                conversation_id=conversation_id,
+            )
+
+
+async def async_setup_entry(hass, entry, async_add_entities) -> None:
+    """Set up conversation entity."""
+    data = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities([LemonadeConversationAgent(entry, data["backend"])])
