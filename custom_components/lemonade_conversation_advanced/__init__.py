@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import DOMAIN, CONF_SERVER_URL, CONF_API_KEY
+from .index_manager import IndexManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -17,6 +18,12 @@ PLATFORMS = [Platform.CONVERSATION]
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the Lemonade Conversation Advanced integration."""
     hass.data.setdefault(DOMAIN, {})
+
+    # Create shared IndexManager
+    index_manager = IndexManager(hass)
+    await index_manager.start()
+    hass.data[DOMAIN]["index_manager"] = index_manager
+
     return True
 
 

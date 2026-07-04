@@ -785,7 +785,7 @@ Focus on meaningful categories that would help discover relevant entities for us
         # Get any conversation agent entry (they all share the same LLM config)
         entries = [entry for entry in self.hass.config_entries.async_entries(DOMAIN)]
         if not entries:
-            raise ValueError("No Lemonade Conversation Advanced config entries found")
+            raise ValueError("No MCP Assist config entries found")
 
         entry = entries[0]
 
