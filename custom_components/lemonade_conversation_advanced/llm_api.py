@@ -29,19 +29,10 @@ class LemonadeLLMAPI(API):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, backend: LemonadeOpenAICompatBackend) -> None:
         """Initialize the API."""
-        self.hass = hass
+        super().__init__(hass, f"{DOMAIN}-{entry.entry_id}", LLM_API_NAME)
         self.entry = entry
         self.backend = backend
-
-    @property
-    def name(self) -> str:
-        """Return API name."""
-        return LLM_API_NAME
-
-    @property
-    def description(self) -> str:
-        """Return API description."""
-        return LLM_API_DESCRIPTION
+        self._description = LLM_API_DESCRIPTION
 
     async def async_get_api_instance(self, llm_context: LLMContext) -> APIInstance:
         """Return the API instance with tools."""
@@ -83,7 +74,7 @@ class LemonadeLLMAPI(API):
                 func=self._get_stats,
             ),
         ]
-        return APIInstance(tools=tools)
+        return APIInstance(api=self, api_prompt=self._description, llm_context=llm_context, tools=tools)
 
     async def _pull_model(self, hass: HomeAssistant, tool_input: ToolInput, llm_context: LLMContext) -> Dict[str, Any]:
         """Pull/download a model."""
