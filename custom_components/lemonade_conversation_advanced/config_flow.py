@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -275,6 +276,10 @@ class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not server_url.startswith(("http://", "https://")):
             server_url = f"http://{server_url}"
 
+        # Ensure URL ends with proper port format
+        if server_url.endswith(":"):
+            server_url = server_url.rstrip(":")
+
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
@@ -287,7 +292,7 @@ class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             async with session.get(
                 url,
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=10),
+                timeout=aiohttp.ClientTimeout(total=15),
             ) as resp:
                 _LOGGER.debug("Response status: %s", resp.status)
                 if resp.status >= 400:
@@ -295,11 +300,19 @@ class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     raise Exception(f"HTTP {resp.status}: {text}")
                 data = await resp.json()
                 _LOGGER.debug("Lemonade Server health: %s", data)
+        except asyncio.TimeoutError:
+            error_msg = f"Timeout connecting to {url}. Check if the server is running and accessible."
+            _LOGGER.error(error_msg)
+            raise Exception(error_msg)
         except aiohttp.ClientError as err:
             error_msg = f"Cannot connect to {url}: {err}"
             _LOGGER.error(error_msg)
             raise Exception(error_msg) from err
         except Exception as err:
+            if "TimeoutError" in str(type(err).__name__):
+                error_msg = f"Timeout connecting to {url}. Check if the server is running and accessible."
+                _LOGGER.error(error_msg)
+                raise Exception(error_msg)
             error_msg = f"Connection test failed: {type(err).__name__}: {err}"
             _LOGGER.error(error_msg)
             raise Exception(error_msg) from err
