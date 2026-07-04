@@ -6,6 +6,9 @@ DOMAIN = "lemonade_conversation_advanced"
 NAME = "Lemonade Conversation Advanced"
 VERSION = "0.2.0"
 
+# Platforms
+PLATFORMS = ["conversation", "sensor", "ai_task"]
+
 # Configuration keys
 CONF_SERVER_URL = "server_url"
 CONF_API_KEY = "api_key"

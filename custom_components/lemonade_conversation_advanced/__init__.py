@@ -31,8 +31,6 @@ BACKEND_TO_CLS = {
     "openai_compat": LemonadeOpenAICompatBackend,
 }
 
-PLATFORMS = ["conversation", "sensor", "ai_task"]
-
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Lemonade Conversation Advanced integration."""

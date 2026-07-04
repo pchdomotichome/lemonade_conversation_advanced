@@ -7,7 +7,7 @@ from typing import Any, Literal, override
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
-from homeassistant.const import CONF_LLM_HASS_API, CONF_PROMPT, MATCH_ALL
+from homeassistant.const import CONF_PROMPT, MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import intent
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
