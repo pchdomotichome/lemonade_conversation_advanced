@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Literal, override
 
@@ -11,12 +12,10 @@ from homeassistant.const import CONF_PROMPT, MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import intent
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.llm import LLMTool
 
 from .backends.openai_compat import LemonadeOpenAICompatBackend
 from .const import (
     CONF_DEFAULT_MODEL,
-    CONF_LLM_HASS_API,
     CONF_MAX_TOOL_ITERATIONS,
     CONF_MAX_TOKENS,
     CONF_STREAMING,
@@ -34,13 +33,12 @@ from .const import (
     DOMAIN,
 )
 from .streaming import StreamingProcessor, StreamResult
-from .tools import get_ha_bridge_tools
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class LemonadeConversationEntity(conversation.ConversationEntity):
-    """Lemonade Conversation Agent with tool calling and streaming."""
+    """Lemonade Conversation Agent with streaming."""
 
     _attr_has_entity_name = True
     _attr_name = None
@@ -54,12 +52,9 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
         self.entry = entry
         self.backend = backend
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_agent"
-
-        # Enable CONTROL feature if LLM API is configured
-        if entry.data.get(CONF_LLM_HASS_API):
-            self._attr_supported_features = (
-                conversation.ConversationEntityFeature.CONTROL
-            )
+        self._attr_supported_features = (
+            conversation.ConversationEntityFeature.CONTROL
+        )
 
     @property
     @override
@@ -80,7 +75,7 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
         try:
             await chat_log.async_provide_llm_data(
                 user_input.as_llm_context(DOMAIN),
-                options.get(CONF_LLM_HASS_API),
+                options.get("llm_hass_api"),
                 options.get(CONF_PROMPT),
                 user_input.extra_system_prompt,
             )
@@ -95,9 +90,6 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
         max_tokens = options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
         streaming = options.get(CONF_STREAMING, DEFAULT_STREAMING)
         timeout = options.get(CONF_TIMEOUT, DEFAULT_TIMEOUT)
-        max_tool_iterations = options.get(
-            CONF_MAX_TOOL_ITERATIONS, DEFAULT_MAX_TOOL_ITERATIONS
-        )
 
         # Build messages from chat log
         messages = self._build_messages(chat_log)
@@ -105,32 +97,52 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
         # Get tools from chat log
         tools = self._get_tools(chat_log)
 
-        # Execute conversation with tool calling loop
-        result = await self._async_generate_with_tools(
-            model=model,
-            messages=messages,
-            tools=tools,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-            max_tokens=max_tokens,
-            streaming=streaming,
-            timeout=timeout,
-            max_iterations=max_tool_iterations,
-            chat_log=chat_log,
-        )
-
-        # Store the response in chat log
-        chat_log.async_add_assistant_content(
-            conversation.AssistantContent(
-                agent_id=self.entity_id,
-                content=result.content,
-                tool_calls=result.tool_calls_list if result.tool_calls else None,
-                tool_results=self._get_tool_results(result, chat_log),
+        # Call the LLM
+        try:
+            response = await self.backend.chat_completion(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                max_tokens=max_tokens,
+                stream=streaming,
+                timeout=timeout,
+                tools=tools,
+                tool_choice="auto" if tools else None,
             )
-        )
 
-        return conversation.async_get_result_from_chat_log(user_input, chat_log)
+            # Process response
+            if streaming:
+                result = await self._process_streaming_response(response)
+            else:
+                result = self._process_non_streaming_response(response)
+
+            # Handle tool calls
+            if result.has_tool_calls:
+                result = await self._handle_tool_calls(
+                    result, messages, tools, model, temperature, top_p,
+                    top_k, max_tokens, streaming, timeout, chat_log
+                )
+
+            # Store the response in chat log
+            chat_log.async_add_assistant_content(
+                conversation.AssistantContent(
+                    agent_id=self.entity_id,
+                    content=result.content,
+                )
+            )
+
+            return conversation.async_get_result_from_chat_log(user_input, chat_log)
+
+        except Exception as err:
+            _LOGGER.error("Error generating response: %s", err)
+            intent_response = intent.IntentResponse(language=user_input.language)
+            intent_response.async_set_speech(f"Error: {err}")
+            return conversation.ConversationResult(
+                response=intent_response,
+                conversation_id=user_input.conversation_id,
+            )
 
     def _build_messages(
         self, chat_log: conversation.ChatLog
@@ -157,7 +169,7 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
                     "role": "assistant",
                     "content": msg.content,
                 }
-                if msg.tool_calls:
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
                     msg_dict["tool_calls"] = msg.tool_calls
                 messages.append(msg_dict)
             elif isinstance(msg, conversation.ToolResultContent):
@@ -178,167 +190,116 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
 
         tools = []
         for tool in chat_log.tools:
-            tools.append({
+            tool_dict: dict[str, Any] = {
                 "type": "function",
                 "function": {
                     "name": tool.name,
                     "description": tool.description,
-                    "parameters": tool.parameters.schema
-                    if hasattr(tool.parameters, "schema")
-                    else tool.parameters,
                 },
-            })
-
-        # Add HA bridge tools
-        ha_tools = get_ha_bridge_tools(self.hass)
-        for tool in ha_tools:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.parameters.schema
-                    if hasattr(tool.parameters, "schema")
-                    else tool.parameters,
-                },
-            })
+            }
+            # Handle parameters schema
+            if hasattr(tool, "parameters") and tool.parameters:
+                if hasattr(tool.parameters, "schema"):
+                    tool_dict["function"]["parameters"] = tool.parameters.schema
+                elif isinstance(tool.parameters, dict):
+                    tool_dict["function"]["parameters"] = tool.parameters
+            tools.append(tool_dict)
 
         return tools if tools else None
 
-    def _get_tool_results(
-        self, result: StreamResult, chat_log: conversation.ChatLog
-    ) -> list[conversation.ToolResultContent] | None:
-        """Get tool results from the last iteration."""
-        # Tool results are stored in the chat log history
-        return None
-
-    async def _async_generate_with_tools(
+    async def _handle_tool_calls(
         self,
-        model: str,
+        result: StreamResult,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None,
+        model: str,
         temperature: float,
         top_p: float,
         top_k: int,
         max_tokens: int,
         streaming: bool,
         timeout: int,
-        max_iterations: int,
         chat_log: conversation.ChatLog,
     ) -> StreamResult:
-        """Generate response with tool calling loop."""
-        iteration = 0
+        """Handle tool calls from the LLM."""
+        # Add assistant message with tool calls
+        assistant_msg: dict[str, Any] = {
+            "role": "assistant",
+            "content": result.content or None,
+            "tool_calls": result.tool_calls_list,
+        }
+        messages.append(assistant_msg)
 
-        while iteration < max_iterations:
-            iteration += 1
-            _LOGGER.debug("Tool calling iteration %d/%d", iteration, max_iterations)
+        # Execute each tool call via HA
+        for tc in result.tool_calls_list:
+            tool_name = tc["function"]["name"]
+            tool_args_str = tc["function"]["arguments"]
 
-            # Call the LLM
-            response = await self.backend.chat_completion(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                top_p=top_p,
-                top_k=top_k,
-                max_tokens=max_tokens,
-                stream=streaming,
-                timeout=timeout,
-                tools=tools,
-                tool_choice="auto" if tools else None,
+            try:
+                tool_args = json.loads(tool_args_str) if tool_args_str else {}
+            except json.JSONDecodeError:
+                tool_args = {}
+
+            # Execute via HA intent system
+            tool_result = await self._execute_ha_tool(
+                tool_name, tool_args, chat_log
             )
 
-            # Process response
-            if streaming:
-                result = await self._process_streaming_response(response)
-            else:
-                result = self._process_non_streaming_response(response)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tc["id"],
+                "content": json.dumps(tool_result),
+            })
 
-            # If no tool calls, we're done
-            if not result.has_tool_calls:
-                return result
-
-            # Execute tool calls
-            _LOGGER.debug(
-                "Executing %d tool calls", len(result.tool_calls_list)
-            )
-
-            # Add assistant message with tool calls to messages
-            assistant_msg: dict[str, Any] = {
-                "role": "assistant",
-                "content": result.content or None,
-                "tool_calls": result.tool_calls_list,
-            }
-            messages.append(assistant_msg)
-
-            # Execute each tool call
-            for tc in result.tool_calls_list:
-                tool_result = await self._execute_tool_call(tc, chat_log)
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc["id"],
-                    "content": str(tool_result),
-                })
-
-        # If we hit max iterations, return last result
-        _LOGGER.warning(
-            "Hit max tool iterations (%d)", max_iterations
+        # Call LLM again with tool results
+        response = await self.backend.chat_completion(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            max_tokens=max_tokens,
+            stream=streaming,
+            timeout=timeout,
+            tools=tools,
+            tool_choice="auto" if tools else None,
         )
-        return result
 
-    async def _execute_tool_call(
+        if streaming:
+            return await self._process_streaming_response(response)
+        return self._process_non_streaming_response(response)
+
+    async def _execute_ha_tool(
         self,
-        tool_call: dict[str, Any],
+        tool_name: str,
+        tool_args: dict[str, Any],
         chat_log: conversation.ChatLog,
-    ) -> Any:
-        """Execute a single tool call."""
-        tool_name = tool_call["function"]["name"]
-        tool_args_str = tool_call["function"]["arguments"]
-
-        # Parse arguments
-        import json
-
-        try:
-            tool_args = json.loads(tool_args_str) if tool_args_str else {}
-        except json.JSONDecodeError:
-            _LOGGER.error("Failed to parse tool arguments: %s", tool_args_str)
-            return {"error": f"Invalid tool arguments: {tool_args_str}"}
-
+    ) -> dict[str, Any]:
+        """Execute a tool via Home Assistant."""
         # Find the tool in chat log tools
-        tool = None
         if chat_log.tools:
-            for t in chat_log.tools:
-                if t.name == tool_name:
-                    tool = t
-                    break
+            for tool in chat_log.tools:
+                if tool.name == tool_name:
+                    try:
+                        from homeassistant.helpers.llm import ToolInput, LLMContext
 
-        # Check HA bridge tools
-        if tool is None:
-            ha_tools = get_ha_bridge_tools(self.hass)
-            for t in ha_tools:
-                if t.name == tool_name:
-                    tool = t
-                    break
+                        tool_input = ToolInput(tool_args=tool_args)
+                        llm_context = LLMContext(
+                            platform=DOMAIN,
+                            context=None,
+                            user_prompt=None,
+                            assistant_response=None,
+                            tool_result=None,
+                        )
+                        result = await tool.async_call(
+                            self.hass, tool_input, llm_context
+                        )
+                        return result
+                    except Exception as err:
+                        _LOGGER.error("Error executing tool %s: %s", tool_name, err)
+                        return {"error": str(err)}
 
-        if tool is None:
-            return {"error": f"Tool {tool_name} not found"}
-
-        # Execute the tool
-        try:
-            from homeassistant.helpers.llm import ToolInput, LLMContext
-
-            tool_input = ToolInput(tool_args=tool_args)
-            llm_context = LLMContext(
-                platform=DOMAIN,
-                context=user_input.context if hasattr(self, "_current_user_input") else None,
-                user_prompt=None,
-                assistant_response=None,
-                tool_result=None,
-            )
-            result = await tool.async_call(self.hass, tool_input, llm_context)
-            return result
-        except Exception as err:
-            _LOGGER.error("Error executing tool %s: %s", tool_name, err)
-            return {"error": str(err)}
+        return {"error": f"Tool {tool_name} not found"}
 
     def _process_non_streaming_response(
         self, response: Any
@@ -354,7 +315,7 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
             content = message.content or ""
             tool_calls = {}
 
-            if message.tool_calls:
+            if hasattr(message, "tool_calls") and message.tool_calls:
                 for i, tc in enumerate(message.tool_calls):
                     tool_calls[i] = {
                         "id": tc.id,
@@ -378,7 +339,7 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
     async def _process_streaming_response(
         self, stream: Any
     ) -> StreamResult:
-        """Process streaming response with true incremental delivery."""
+        """Process streaming response."""
         processor = StreamingProcessor()
         return await processor.process_stream(stream)
 
