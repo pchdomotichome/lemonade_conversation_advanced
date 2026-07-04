@@ -4,7 +4,7 @@ from __future__ import annotations
 
 DOMAIN = "lemonade_conversation_advanced"
 NAME = "Lemonade Conversation Advanced"
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
 # Platforms
 PLATFORMS = ["conversation", "sensor", "ai_task"]
