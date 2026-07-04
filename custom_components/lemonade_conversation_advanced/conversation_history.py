@@ -1,4 +1,4 @@
-"""Conversation history management for LM Studio MCP."""
+"""Conversation history management for Lemonade Conversation Advanced."""
 
 import logging
 from typing import Any, Dict, List, Optional

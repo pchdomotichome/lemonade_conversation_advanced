@@ -1,4 +1,4 @@
-"""LM Studio MCP conversation agent."""
+"""Lemonade Conversation Advanced agent."""
 
 import asyncio
 import json
@@ -79,7 +79,7 @@ from .const import (
     DEFAULT_CLEAN_RESPONSES,
     DEFAULT_TIMEOUT,
     RESPONSE_MODE_INSTRUCTIONS,
-    SERVER_TYPE_LMSTUDIO,
+    SERVER_TYPE_LEMONADE,
     SERVER_TYPE_LLAMACPP,
     SERVER_TYPE_OLLAMA,
     SERVER_TYPE_OPENAI,
@@ -121,7 +121,7 @@ class LemonadeConversationEntity(ConversationEntity):
 
         # Server type display names
         server_display_names = {
-            SERVER_TYPE_LMSTUDIO: "LM Studio",
+            SERVER_TYPE_LEMONADE: "Lemonade",
             SERVER_TYPE_LLAMACPP: "llama.cpp",
             SERVER_TYPE_OLLAMA: "Ollama",
             SERVER_TYPE_OPENAI: "OpenAI",
@@ -169,7 +169,7 @@ class LemonadeConversationEntity(ConversationEntity):
         elif self.server_type == SERVER_TYPE_OPENROUTER:
             self.base_url = OPENROUTER_BASE_URL
         else:
-            # LM Studio or Ollama - URL can change, so make it a property below
+            # Lemonade or Ollama - URL can change, so make it a property below
             pass
 
         # All other config values are now dynamic properties (see @property methods below)
@@ -208,7 +208,7 @@ class LemonadeConversationEntity(ConversationEntity):
         ]:
             return self.base_url  # Static cloud URLs
         else:
-            # LM Studio, Ollama, llamacpp, OpenClaw, vLLM - read dynamically
+            # Lemonade, Ollama, llamacpp, OpenClaw, vLLM - read dynamically
             return self.entry.options.get(
                 CONF_SERVER_URL, self.entry.data.get(CONF_SERVER_URL, "")
             ).rstrip("/")
@@ -319,7 +319,7 @@ class LemonadeConversationEntity(ConversationEntity):
     def attribution(self) -> str:
         """Return attribution."""
         server_name = {
-            SERVER_TYPE_LMSTUDIO: "LM Studio",
+            SERVER_TYPE_LEMONADE: "Lemonade",
             SERVER_TYPE_LLAMACPP: "llama.cpp",
             SERVER_TYPE_OLLAMA: "Ollama",
             SERVER_TYPE_OPENAI: "OpenAI",
@@ -412,7 +412,7 @@ class LemonadeConversationEntity(ConversationEntity):
     def _get_server_display_name(self) -> str:
         """Get friendly display name for the server type."""
         return {
-            SERVER_TYPE_LMSTUDIO: "LM Studio",
+            SERVER_TYPE_LEMONADE: "Lemonade",
             SERVER_TYPE_LLAMACPP: "llama.cpp",
             SERVER_TYPE_OLLAMA: "Ollama",
             SERVER_TYPE_OPENAI: "OpenAI",
@@ -1097,7 +1097,7 @@ class LemonadeConversationEntity(ConversationEntity):
     def _build_messages(
         self, system_prompt: str, user_text: str, history: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """Build message list for LM Studio."""
+        """Build message list for Lemonade."""
         messages = [{"role": "system", "content": system_prompt}]
 
         # Add conversation history (last 5 turns)
@@ -1136,7 +1136,7 @@ class LemonadeConversationEntity(ConversationEntity):
                         tools = data["result"]["tools"]
                         _LOGGER.info("Retrieved %d MCP tools", len(tools))
 
-                        # Convert to OpenAI format for LM Studio
+                        # Convert to OpenAI format for Lemonade
                         openai_tools = []
                         tool_names = []
                         for tool in tools:
@@ -1541,7 +1541,7 @@ class LemonadeConversationEntity(ConversationEntity):
                 "X-Title": "Lemonade Conversation Advanced for Home Assistant",
             }
         else:
-            # Local servers (LM Studio, Ollama, llamacpp, vLLM) don't need auth
+            # Local servers (Lemonade, Ollama, llamacpp, vLLM) don't need auth
             return {}
 
     def _build_openai_payload(
@@ -1550,7 +1550,7 @@ class LemonadeConversationEntity(ConversationEntity):
         tools: Optional[List[Dict[str, Any]]] = None,
         stream: bool = True,
     ) -> Dict[str, Any]:
-        """Build OpenAI-compatible payload for LM Studio, OpenAI, Gemini, Anthropic, OpenClaw, vLLM."""
+        """Build OpenAI-compatible payload for Lemonade, OpenAI, Gemini, Anthropic, OpenClaw, vLLM."""
         payload = {"model": self.model_name, "messages": messages, "stream": stream}
 
         # Temperature (skip for GPT-5+/o1 models)
@@ -2033,7 +2033,7 @@ class LemonadeConversationEntity(ConversationEntity):
                     )
 
                 # Add assistant message with tool calls
-                # LM Studio streaming requires NO content field at all when tool_calls exist
+                # Lemonade streaming requires NO content field at all when tool_calls exist
                 # Gemini 3: thought_signature goes INSIDE each tool_call, not at message level
                 if current_thought_signature is not None:
                     for tool_call in current_tool_calls:
@@ -2320,12 +2320,12 @@ class LemonadeConversationEntity(ConversationEntity):
     ) -> List[Dict[str, Any]]:
         """Parse response for any action information.
 
-        NOTE: With MCP tools, LM Studio executes actions directly via the MCP server.
+        NOTE: With MCP tools, Lemonade executes actions directly via the MCP server.
         We don't need to parse intents or execute them - just return info about what happened.
         """
         actions_taken = []
 
-        # MCP tools are executed by LM Studio directly, so we just log what was mentioned
+        # MCP tools are executed by Lemonade directly, so we just log what was mentioned
         # The actual actions have already been performed via MCP's perform_action tool
 
         _LOGGER.info(

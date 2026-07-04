@@ -4,7 +4,7 @@ DOMAIN = "lemonade_conversation_advanced"
 SYSTEM_ENTRY_UNIQUE_ID = "lemonade_conversation_advanced_system_settings"
 
 # Server type options
-SERVER_TYPE_LMSTUDIO = "lmstudio"
+SERVER_TYPE_LEMONADE = "lmstudio"
 SERVER_TYPE_LLAMACPP = "llamacpp"
 SERVER_TYPE_OLLAMA = "ollama"
 SERVER_TYPE_OPENAI = "openai"
@@ -21,7 +21,7 @@ CONF_SERVER_URL = "server_url"
 CONF_API_KEY = "api_key"
 
 DEFAULT_SERVER_URL = "http://localhost:13305"
-CONF_LMSTUDIO_URL = "lmstudio_url"
+CONF_LEMONADE_URL = "lmstudio_url"
 CONF_MODEL_NAME = "model_name"
 CONF_LEMONADE_PORT = "mcp_port"
 CONF_AUTO_START = "auto_start"
@@ -49,7 +49,7 @@ CONF_TIMEOUT = "timeout"
 
 # Default values
 DEFAULT_SERVER_TYPE = "lmstudio"
-DEFAULT_LMSTUDIO_URL = "http://localhost:1234"
+DEFAULT_LEMONADE_URL = "http://localhost:1234"
 DEFAULT_LLAMACPP_URL = "http://localhost:8080"
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 # OpenClaw Gateway defaults
