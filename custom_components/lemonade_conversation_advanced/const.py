@@ -107,13 +107,31 @@ STREAM_TIMEOUT = 300
 SUPPORTED_BACKENDS = ["llamacpp", "ryzenai", "vllm", "fastflowlm"]
 SUPPORTED_RECIPES = ["llamacpp", "ryzenai", "vllm", "fastflowlm", "custom"]
 
-# Tool names
+# Tool names - Lemonade management
 TOOL_PULL_MODEL = "lemonade_pull_model"
 TOOL_LOAD_MODEL = "lemonade_load_model"
 TOOL_UNLOAD_MODEL = "lemonade_unload_model"
 TOOL_LIST_MODELS = "lemonade_list_models"
 TOOL_SYSTEM_INFO = "lemonade_system_info"
 TOOL_GET_STATS = "lemonade_get_stats"
+
+# Tool names - HA bridge
 TOOL_EXECUTE_SERVICE = "execute_service"
 TOOL_GET_STATE = "get_state"
 TOOL_RENDER_TEMPLATE = "render_template"
+
+# HA LLM API
+CONF_LLM_HASS_API = "llm_hass_api"
+CONF_LLM_HASS_API_VALUE = "conversation"
+
+# Conversation agent features
+CONF_MAX_TOOL_ITERATIONS = "max_tool_iterations"
+DEFAULT_MAX_TOOL_ITERATIONS = 10
+
+# Streaming
+STREAM_CHUNK_SIZE = 1
+
+# Events
+EVENT_CONVERSATION_STARTED = f"{DOMAIN}_conversation_started"
+EVENT_CONVERSATION_ENDED = f"{DOMAIN}_conversation_ended"
+EVENT_CONVERSATION_ERROR = f"{DOMAIN}_conversation_error"

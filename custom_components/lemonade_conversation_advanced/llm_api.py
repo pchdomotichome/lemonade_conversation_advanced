@@ -6,6 +6,7 @@ import logging
 from typing import Any, Dict
 
 import voluptuous as vol
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.llm import API, APIInstance, LLMContext, Tool, ToolInput
 from homeassistant.core import HomeAssistant
 

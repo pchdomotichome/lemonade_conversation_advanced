@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigSubentry
+from homeassistant.const import CONF_API_KEY, CONF_URL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.typing import ConfigType
@@ -16,8 +17,10 @@ from .client import LemonadeClient
 from .const import (
     CONF_API_KEY,
     CONF_DEFAULT_MODEL,
+    CONF_LLM_HASS_API,
     CONF_SERVER_URL,
     DOMAIN,
+    PLATFORMS,
 )
 from .services import async_setup_services, async_unload_services
 
@@ -27,6 +30,8 @@ _LOGGER = logging.getLogger(__name__)
 BACKEND_TO_CLS = {
     "openai_compat": LemonadeOpenAICompatBackend,
 }
+
+PLATFORMS = ["conversation", "sensor", "ai_task"]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -64,8 +69,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "entry": entry,
     }
 
+    # Create default conversation subentry if none exist
+    if not any(
+        sub.subentry_type == "conversation"
+        for sub in entry.subentries.values()
+    ):
+        entry.async_add_subentry(
+            ConfigSubentry(
+                data={
+                    CONF_DEFAULT_MODEL: entry.data.get(CONF_DEFAULT_MODEL, ""),
+                    CONF_LLM_HASS_API: "conversation",
+                    "name": "Default",
+                },
+                subentry_type="conversation",
+                title="Default",
+            )
+        )
+
     # Forward setup to platforms
-    await hass.config_entries.async_forward_entry_setups(entry, ["conversation", "sensor", "ai_task"])
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Register services
     await async_setup_services(hass, entry)
@@ -85,9 +107,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await async_unload_services(hass, entry)
 
     # Unload platforms
-    unload_ok = await hass.config_entries.async_unload_platforms(
-        entry, ["conversation", "sensor", "ai_task"]
-    )
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
         # Close client
@@ -114,7 +134,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         new_data = dict(entry.data)
         new_options = dict(entry.options)
         # Migration logic here
-        hass.config_entries.async_update_entry(entry, data=new_data, options=new_options, version=2)
+        hass.config_entries.async_update_entry(
+            entry, data=new_data, options=new_options, version=2
+        )
         _LOGGER.info("Migrated config entry to version 2")
 
     return True
