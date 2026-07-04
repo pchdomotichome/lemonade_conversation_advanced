@@ -139,4 +139,8 @@ class LemonadeConversationAgent(conversation.ConversationEntity, conversation.Ab
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
     """Set up conversation entity."""
     data = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([LemonadeConversationAgent(entry, data["backend"])])
+    agent = LemonadeConversationAgent(entry, data["backend"])
+    async_add_entities([agent])
+    entry.async_on_unload(
+        conversation.async_set_agent(hass, entry, agent)
+    )
