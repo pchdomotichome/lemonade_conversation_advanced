@@ -3,7 +3,7 @@
   "content_in_root": false,
   "homeassistant": "2025.7",
   "hacs": "2.0.5",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "render_readme": true,
   "country": "AR",
   "category": "integration"
