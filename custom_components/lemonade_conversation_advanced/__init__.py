@@ -81,6 +81,27 @@ async def _async_update_listener(
     await hass.config_entries.async_reload(entry.entry_id)
 
 
+async def async_migrate_entry(
+    hass: HomeAssistant, entry: LemonadeConfigEntry
+) -> bool:
+    """Migrate old config entry."""
+    _LOGGER.debug("Migrating config entry from version %s", entry.version)
+
+    if entry.version == 2:
+        # Version 2 -> 3: Restructure data for subentry pattern
+        # Move model/prompt settings from options to a default subentry
+        new_data = {
+            "server_url": entry.data.get("server_url", ""),
+            "api_key": entry.data.get("api_key", ""),
+        }
+        hass.config_entries.async_update_entry(
+            entry, data=new_data, version=3
+        )
+        _LOGGER.info("Migrated config entry to version 3")
+
+    return True
+
+
 async def async_unload_entry(
     hass: HomeAssistant, entry: LemonadeConfigEntry
 ) -> bool:
