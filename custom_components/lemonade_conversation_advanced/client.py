@@ -345,16 +345,31 @@ class LemonadeClient:
         **kwargs,
     ):
         """Use AsyncOpenAI client for chat completion."""
-        return await self.openai_client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            stream=stream,
-            tools=tools,
-            tool_choice=tool_choice,
-            **kwargs,
-        )
+        try:
+            return await self.openai_client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=stream,
+                tools=tools,
+                tool_choice=tool_choice,
+                **kwargs,
+            )
+        except TypeError as err:
+            if "extra_body" in str(err):
+                kwargs.pop("extra_body", None)
+                return await self.openai_client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stream=stream,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    **kwargs,
+                )
+            raise
 
     async def openai_stream_chat_completion(
         self,
@@ -367,15 +382,31 @@ class LemonadeClient:
         **kwargs,
     ):
         """Stream chat completion using OpenAI client."""
-        stream = await self.openai_client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            stream=True,
-            tools=tools,
-            tool_choice=tool_choice,
-            **kwargs,
-        )
+        try:
+            stream = await self.openai_client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=True,
+                tools=tools,
+                tool_choice=tool_choice,
+                **kwargs,
+            )
+        except TypeError as err:
+            if "extra_body" in str(err):
+                kwargs.pop("extra_body", None)
+                stream = await self.openai_client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stream=True,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    **kwargs,
+                )
+            else:
+                raise
         async for chunk in stream:
             yield chunk
