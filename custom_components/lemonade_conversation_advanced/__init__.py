@@ -3,33 +3,32 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry, ConfigSubentry
-from homeassistant.const import CONF_API_KEY, CONF_URL
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.typing import ConfigType
 
-from .backends import get_backend_class
 from .backends.openai_compat import LemonadeOpenAICompatBackend
 from .client import LemonadeClient
-from .const import (
-    CONF_API_KEY,
-    CONF_DEFAULT_MODEL,
-    CONF_LLM_HASS_API,
-    CONF_SERVER_URL,
-    DOMAIN,
-    PLATFORMS,
-)
-from .services import async_setup_services, async_unload_services
+from .const import CONF_API_KEY, CONF_SERVER_URL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-# Backend registry (extensible)
-BACKEND_TO_CLS = {
-    "openai_compat": LemonadeOpenAICompatBackend,
-}
+PLATFORMS = [Platform.CONVERSATION, Platform.AI_TASK, Platform.SENSOR]
+
+type LemonadeConfigEntry = ConfigEntry[LemonadeRuntimeData]
+
+
+@dataclass
+class LemonadeRuntimeData:
+    """Runtime data for Lemonade config entry."""
+
+    client: LemonadeClient
+    backend: LemonadeOpenAICompatBackend
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -37,9 +36,13 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(
+    hass: HomeAssistant, entry: LemonadeConfigEntry
+) -> bool:
     """Set up Lemonade Conversation Advanced from a config entry."""
-    _LOGGER.debug("Setting up Lemonade Conversation Advanced entry: %s", entry.entry_id)
+    _LOGGER.debug(
+        "Setting up Lemonade Conversation Advanced entry: %s", entry.entry_id
+    )
 
     # Get configuration
     server_url = entry.data.get(CONF_SERVER_URL)
@@ -49,8 +52,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     client = LemonadeClient(base_url=server_url, api_key=api_key)
 
     # Create backend
-    backend_cls = BACKEND_TO_CLS.get("openai_compat")
-    backend = backend_cls(client)
+    backend = LemonadeOpenAICompatBackend(client)
 
     # Validate connection
     try:
@@ -59,65 +61,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error("Failed to connect to Lemonade Server: %s", err)
         raise ConfigEntryNotReady from err
 
-    # Store in hass.data
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {
-        "client": client,
-        "backend": backend,
-        "entry": entry,
-    }
+    # Store runtime data
+    entry.runtime_data = LemonadeRuntimeData(client=client, backend=backend)
 
     # Forward setup to platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Register services
-    await async_setup_services(hass, entry)
-
-    # Register update listener for options changes
-    entry.async_on_unload(entry.add_update_listener(async_update_options))
+    # Register update listener
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     _LOGGER.info("Lemonade Conversation Advanced setup complete")
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    _LOGGER.debug("Unloading Lemonade Conversation Advanced entry: %s", entry.entry_id)
+async def _async_update_listener(
+    hass: HomeAssistant, entry: LemonadeConfigEntry
+) -> None:
+    """Handle options update."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
-    # Unload services
-    await async_unload_services(hass, entry)
+
+async def async_unload_entry(
+    hass: HomeAssistant, entry: LemonadeConfigEntry
+) -> bool:
+    """Unload a config entry."""
+    _LOGGER.debug(
+        "Unloading Lemonade Conversation Advanced entry: %s", entry.entry_id
+    )
 
     # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
         # Close client
-        data = hass.data[DOMAIN].pop(entry.entry_id, {})
-        client = data.get("client")
-        if client:
-            await client.close()
+        if entry.runtime_data:
+            await entry.runtime_data.client.close()
 
     return unload_ok
-
-
-async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Update options."""
-    _LOGGER.debug("Updating options for entry: %s", entry.entry_id)
-    await hass.config_entries.async_reload(entry.entry_id)
-
-
-async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate old config entry."""
-    _LOGGER.debug("Migrating config entry from version %s", entry.version)
-
-    # Version 1 -> 2: Add subentries support
-    if entry.version == 1:
-        new_data = dict(entry.data)
-        new_options = dict(entry.options)
-        # Migration logic here
-        hass.config_entries.async_update_entry(
-            entry, data=new_data, options=new_options, version=2
-        )
-        _LOGGER.info("Migrated config entry to version 2")
-
-    return True

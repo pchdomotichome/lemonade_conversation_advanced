@@ -1,20 +1,19 @@
-"""Conversation agent for Lemonade Conversation Advanced."""
+"""Conversation support for Lemonade Conversation Advanced."""
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Literal, override
 
 from homeassistant.components import conversation
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PROMPT, MATCH_ALL
+from homeassistant.config_entries import ConfigSubentry
+from homeassistant.const import CONF_LLM_HASS_API, CONF_MODEL, CONF_PROMPT, MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import intent, llm
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .backends.openai_compat import LemonadeOpenAICompatBackend
 from .const import (
-    CONF_DEFAULT_MODEL,
     CONF_MAX_TOKENS,
     CONF_STREAMING,
     CONF_TEMPERATURE,
@@ -29,7 +28,6 @@ from .const import (
     DEFAULT_TOP_P,
     DOMAIN,
 )
-from .streaming import StreamingProcessor, StreamResult
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,7 +66,7 @@ def _convert_content(
                     "type": "function",
                     "function": {
                         "name": tc.tool_name,
-                        "arguments": __import__("json").dumps(tc.tool_args),
+                        "arguments": json.dumps(tc.tool_args),
                     },
                 }
                 for tc in content.tool_calls
@@ -79,10 +77,25 @@ def _convert_content(
             {
                 "role": "tool",
                 "tool_call_id": content.tool_call_id,
-                "content": __import__("json").dumps(content.tool_result),
+                "content": json.dumps(content.tool_result),
             }
         ]
     return []
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: Any,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    """Set up conversation entities."""
+    for subentry_id, subentry in config_entry.subentries.items():
+        if subentry.subentry_type != "conversation":
+            continue
+        async_add_entities(
+            [LemonadeConversationEntity(config_entry, subentry)],
+            config_subentry_id=subentry_id,
+        )
 
 
 class LemonadeConversationEntity(conversation.ConversationEntity):
@@ -93,13 +106,13 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
 
     def __init__(
         self,
-        entry: ConfigEntry,
-        backend: LemonadeOpenAICompatBackend,
+        entry: Any,
+        subentry: ConfigSubentry,
     ) -> None:
         """Initialize the agent."""
         self.entry = entry
-        self.backend = backend
-        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_agent"
+        self.subentry = subentry
+        self._attr_unique_id = subentry.subentry_id
         self._attr_supported_features = (
             conversation.ConversationEntityFeature.CONTROL
         )
@@ -117,21 +130,21 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
         chat_log: conversation.ChatLog,
     ) -> conversation.ConversationResult:
         """Process the user input and call the API."""
-        options = self.entry.data
+        options = self.subentry.data
 
         # Provide LLM data (entities, tools, system prompt)
         try:
             await chat_log.async_provide_llm_data(
                 user_input.as_llm_context(DOMAIN),
-                options.get("llm_hass_api"),
+                options.get(CONF_LLM_HASS_API),
                 options.get(CONF_PROMPT),
                 user_input.extra_system_prompt,
             )
         except conversation.ConverseError as err:
             return err.as_conversation_result()
 
-        # Get configuration
-        model = options.get(CONF_DEFAULT_MODEL, "")
+        # Get configuration from subentry
+        model = options.get(CONF_MODEL, "")
         temperature = options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE)
         top_p = options.get(CONF_TOP_P, DEFAULT_TOP_P)
         top_k = options.get(CONF_TOP_K, DEFAULT_TOP_K)
@@ -151,10 +164,13 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
             for m in _convert_content(content)
         ]
 
+        # Get the backend client
+        backend = self.entry.runtime_data.backend
+
         # Tool calling loop
         for _iteration in range(10):
             # Call the LLM
-            response = await self.backend.chat_completion(
+            response = await backend.chat_completion(
                 model=model,
                 messages=messages,
                 temperature=temperature,
@@ -182,18 +198,13 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
                 break
 
         # Return final response
-        last_content = chat_log.content[-1]
-        intent_response = intent.IntentResponse(language=user_input.language)
-        intent_response.async_set_speech(last_content.content or "")
-        return conversation.ConversationResult(
-            response=intent_response,
-            conversation_id=chat_log.conversation_id,
-            continue_conversation=chat_log.continue_conversation,
-        )
+        return conversation.async_get_result_from_chat_log(user_input, chat_log)
 
     def _transform_stream(self, stream: Any):
         """Transform streaming response to delta format."""
         async def _generator():
+            from .streaming import StreamingProcessor
+
             processor = StreamingProcessor()
             result = await processor.process_stream(stream)
 
@@ -234,7 +245,7 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
                             llm.ToolInput(
                                 id=tc.id,
                                 tool_name=tc.function.name,
-                                tool_args=__import__("json").loads(
+                                tool_args=json.loads(
                                     tc.function.arguments
                                 )
                                 if tc.function.arguments
@@ -248,14 +259,3 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
                 yield {"content": f"Error: {err}"}
 
         return _generator()
-
-
-async def async_setup_entry(
-    hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddConfigEntryEntitiesCallback,
-) -> None:
-    """Set up conversation entity."""
-    data = hass.data[DOMAIN][config_entry.entry_id]
-    backend = data["backend"]
-    async_add_entities([LemonadeConversationEntity(config_entry, backend)])
