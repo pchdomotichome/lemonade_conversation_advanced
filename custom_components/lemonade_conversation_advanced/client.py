@@ -104,17 +104,15 @@ class LemonadeClient:
         self.api_key = api_key
         self.timeout = aiohttp.ClientTimeout(total=timeout, connect=CONNECT_TIMEOUT)
         self._session: Optional[aiohttp.ClientSession] = None
-        self._openai_client: Optional[AsyncOpenAI] = None
+        self._openai_client = AsyncOpenAI(
+            base_url=f"{base_url.rstrip('/')}{LEMONADE_API_PREFIX}",
+            api_key=api_key or "not-needed",
+            timeout=DEFAULT_TIMEOUT,
+        )
 
     @property
     def openai_client(self) -> AsyncOpenAI:
-        """Get or create AsyncOpenAI client."""
-        if self._openai_client is None:
-            self._openai_client = AsyncOpenAI(
-                base_url=f"{self.base_url}{LEMONADE_API_PREFIX}",
-                api_key=self.api_key or "not-needed",
-                timeout=DEFAULT_TIMEOUT,
-            )
+        """Return AsyncOpenAI client."""
         return self._openai_client
 
     async def _get_session(self) -> aiohttp.ClientSession:
