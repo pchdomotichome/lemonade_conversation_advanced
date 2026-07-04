@@ -1,24 +1,18 @@
 {
   "domain": "lemonade_conversation_advanced",
   "name": "Lemonade Conversation Advanced",
-  "version": "0.2.1",
+  "version": "1.0.0-beta.2",
   "config_flow": true,
   "documentation": "https://github.com/pchdomotichome/lemonade_conversation_advanced",
   "issue_tracker": "https://github.com/pchdomotichome/lemonade_conversation_advanced/issues",
   "requirements": [
-    "openai>=1.0.0",
-    "voluptuous-openapi",
-    "aiohttp>=3.8.0"
+    "openai>=1.0.0"
   ],
   "dependencies": [
-    "conversation",
-    "intent",
-    "ai_task"
+    "conversation"
   ],
   "after_dependencies": [
-    "assist_pipeline",
-    "intent",
-    "llm"
+    "intent"
   ],
   "iot_class": "local_polling",
   "codeowners": [
