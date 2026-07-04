@@ -141,6 +141,6 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
     agent = LemonadeConversationAgent(entry, data["backend"])
     async_add_entities([agent])
-    entry.async_on_unload(
-        conversation.async_set_agent(hass, entry, agent)
-    )
+    result = conversation.async_set_agent(hass, entry, agent)
+    if callable(result):
+        entry.async_on_unload(result)
