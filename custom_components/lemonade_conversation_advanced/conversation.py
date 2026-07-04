@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, Literal, override
 
@@ -10,13 +9,12 @@ from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PROMPT, MATCH_ALL
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import intent
+from homeassistant.helpers import intent, llm
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .backends.openai_compat import LemonadeOpenAICompatBackend
 from .const import (
     CONF_DEFAULT_MODEL,
-    CONF_MAX_TOOL_ITERATIONS,
     CONF_MAX_TOKENS,
     CONF_STREAMING,
     CONF_TEMPERATURE,
@@ -24,7 +22,6 @@ from .const import (
     CONF_TOP_K,
     CONF_TOP_P,
     DEFAULT_MAX_TOKENS,
-    DEFAULT_MAX_TOOL_ITERATIONS,
     DEFAULT_STREAMING,
     DEFAULT_TEMPERATURE,
     DEFAULT_TIMEOUT,
@@ -35,6 +32,57 @@ from .const import (
 from .streaming import StreamingProcessor, StreamResult
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _format_tool(tool: llm.Tool) -> dict[str, Any]:
+    """Format an llm.Tool for OpenAI API."""
+    tool_dict: dict[str, Any] = {
+        "type": "function",
+        "function": {
+            "name": tool.name,
+            "description": tool.description,
+        },
+    }
+    if tool.parameters:
+        tool_dict["function"]["parameters"] = tool.parameters.schema
+    return tool_dict
+
+
+def _convert_content(
+    content: conversation.Content,
+) -> list[dict[str, Any]]:
+    """Convert chat log content to OpenAI messages."""
+    if isinstance(content, conversation.SystemContent):
+        return [{"role": "system", "content": content.content}]
+    if isinstance(content, conversation.UserContent):
+        return [{"role": "user", "content": content.content}]
+    if isinstance(content, conversation.AssistantContent):
+        msg: dict[str, Any] = {
+            "role": "assistant",
+            "content": content.content or "",
+        }
+        if content.tool_calls:
+            msg["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.tool_name,
+                        "arguments": __import__("json").dumps(tc.tool_args),
+                    },
+                }
+                for tc in content.tool_calls
+            ]
+        return [msg]
+    if isinstance(content, conversation.ToolResultContent):
+        return [
+            {
+                "role": "tool",
+                "tool_call_id": content.tool_call_id,
+                "content": __import__("json").dumps(content.tool_result),
+            }
+        ]
+    return []
 
 
 class LemonadeConversationEntity(conversation.ConversationEntity):
@@ -91,14 +139,21 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
         streaming = options.get(CONF_STREAMING, DEFAULT_STREAMING)
         timeout = options.get(CONF_TIMEOUT, DEFAULT_TIMEOUT)
 
+        # Format tools for OpenAI API
+        tools: list[dict[str, Any]] | None = None
+        if chat_log.llm_api:
+            tools = [_format_tool(tool) for tool in chat_log.llm_api.tools]
+
         # Build messages from chat log
-        messages = self._build_messages(chat_log)
+        messages = [
+            m
+            for content in chat_log.content
+            for m in _convert_content(content)
+        ]
 
-        # Get tools from chat log
-        tools = self._get_tools(chat_log)
-
-        # Call the LLM
-        try:
+        # Tool calling loop
+        for _iteration in range(10):
+            # Call the LLM
             response = await self.backend.chat_completion(
                 model=model,
                 messages=messages,
@@ -112,236 +167,87 @@ class LemonadeConversationEntity(conversation.ConversationEntity):
                 tool_choice="auto" if tools else None,
             )
 
-            # Process response
+            # Process response and add to chat log
             if streaming:
-                result = await self._process_streaming_response(response)
+                stream_result = self._transform_stream(response)
             else:
-                result = self._process_non_streaming_response(response)
+                stream_result = self._transform_non_stream(response)
 
-            # Handle tool calls
-            if result.has_tool_calls:
-                result = await self._handle_tool_calls(
-                    result, messages, tools, model, temperature, top_p,
-                    top_k, max_tokens, streaming, timeout, chat_log
-                )
+            async for content in chat_log.async_add_delta_content_stream(
+                user_input.agent_id, stream_result
+            ):
+                messages.extend(_convert_content(content))
 
-            # Store the response in chat log
-            chat_log.async_add_assistant_content(
-                conversation.AssistantContent(
-                    agent_id=self.entity_id,
-                    content=result.content,
-                )
-            )
+            if not chat_log.unresponded_tool_results:
+                break
 
-            return conversation.async_get_result_from_chat_log(user_input, chat_log)
-
-        except Exception as err:
-            _LOGGER.error("Error generating response: %s", err)
-            intent_response = intent.IntentResponse(language=user_input.language)
-            intent_response.async_set_speech(f"Error: {err}")
-            return conversation.ConversationResult(
-                response=intent_response,
-                conversation_id=user_input.conversation_id,
-            )
-
-    def _build_messages(
-        self, chat_log: conversation.ChatLog
-    ) -> list[dict[str, Any]]:
-        """Build messages array from chat log."""
-        messages = []
-
-        # System prompt
-        if chat_log.system_prompt:
-            messages.append({
-                "role": "system",
-                "content": chat_log.system_prompt,
-            })
-
-        # Conversation history
-        for msg in chat_log.history:
-            if isinstance(msg, conversation.UserContent):
-                messages.append({
-                    "role": "user",
-                    "content": msg.content,
-                })
-            elif isinstance(msg, conversation.AssistantContent):
-                msg_dict: dict[str, Any] = {
-                    "role": "assistant",
-                    "content": msg.content,
-                }
-                if hasattr(msg, "tool_calls") and msg.tool_calls:
-                    msg_dict["tool_calls"] = msg.tool_calls
-                messages.append(msg_dict)
-            elif isinstance(msg, conversation.ToolResultContent):
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": msg.tool_call_id,
-                    "content": str(msg.content),
-                })
-
-        return messages
-
-    def _get_tools(
-        self, chat_log: conversation.ChatLog
-    ) -> list[dict[str, Any]] | None:
-        """Get tools in OpenAI format from chat log."""
-        if not chat_log.tools:
-            return None
-
-        tools = []
-        for tool in chat_log.tools:
-            tool_dict: dict[str, Any] = {
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description,
-                },
-            }
-            # Handle parameters schema
-            if hasattr(tool, "parameters") and tool.parameters:
-                if hasattr(tool.parameters, "schema"):
-                    tool_dict["function"]["parameters"] = tool.parameters.schema
-                elif isinstance(tool.parameters, dict):
-                    tool_dict["function"]["parameters"] = tool.parameters
-            tools.append(tool_dict)
-
-        return tools if tools else None
-
-    async def _handle_tool_calls(
-        self,
-        result: StreamResult,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None,
-        model: str,
-        temperature: float,
-        top_p: float,
-        top_k: int,
-        max_tokens: int,
-        streaming: bool,
-        timeout: int,
-        chat_log: conversation.ChatLog,
-    ) -> StreamResult:
-        """Handle tool calls from the LLM."""
-        # Add assistant message with tool calls
-        assistant_msg: dict[str, Any] = {
-            "role": "assistant",
-            "content": result.content or None,
-            "tool_calls": result.tool_calls_list,
-        }
-        messages.append(assistant_msg)
-
-        # Execute each tool call via HA
-        for tc in result.tool_calls_list:
-            tool_name = tc["function"]["name"]
-            tool_args_str = tc["function"]["arguments"]
-
-            try:
-                tool_args = json.loads(tool_args_str) if tool_args_str else {}
-            except json.JSONDecodeError:
-                tool_args = {}
-
-            # Execute via HA intent system
-            tool_result = await self._execute_ha_tool(
-                tool_name, tool_args, chat_log
-            )
-
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tc["id"],
-                "content": json.dumps(tool_result),
-            })
-
-        # Call LLM again with tool results
-        response = await self.backend.chat_completion(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-            max_tokens=max_tokens,
-            stream=streaming,
-            timeout=timeout,
-            tools=tools,
-            tool_choice="auto" if tools else None,
+        # Return final response
+        last_content = chat_log.content[-1]
+        intent_response = intent.IntentResponse(language=user_input.language)
+        intent_response.async_set_speech(last_content.content or "")
+        return conversation.ConversationResult(
+            response=intent_response,
+            conversation_id=chat_log.conversation_id,
+            continue_conversation=chat_log.continue_conversation,
         )
 
-        if streaming:
-            return await self._process_streaming_response(response)
-        return self._process_non_streaming_response(response)
+    def _transform_stream(self, stream: Any):
+        """Transform streaming response to delta format."""
+        async def _generator():
+            processor = StreamingProcessor()
+            result = await processor.process_stream(stream)
 
-    async def _execute_ha_tool(
-        self,
-        tool_name: str,
-        tool_args: dict[str, Any],
-        chat_log: conversation.ChatLog,
-    ) -> dict[str, Any]:
-        """Execute a tool via Home Assistant."""
-        # Find the tool in chat log tools
-        if chat_log.tools:
-            for tool in chat_log.tools:
-                if tool.name == tool_name:
-                    try:
-                        from homeassistant.helpers.llm import ToolInput, LLMContext
+            # Yield content delta
+            if result.content:
+                yield {"content": result.content}
 
-                        tool_input = ToolInput(tool_args=tool_args)
-                        llm_context = LLMContext(
-                            platform=DOMAIN,
-                            context=None,
-                            user_prompt=None,
-                            assistant_response=None,
-                            tool_result=None,
+            # Yield thinking content if present
+            if result.thinking:
+                yield {"thinking_content": result.thinking}
+
+            # Yield tool calls if present
+            if result.tool_calls_list:
+                yield {"tool_calls": result.tool_calls_list}
+
+        return _generator()
+
+    def _transform_non_stream(self, response: Any):
+        """Transform non-streaming response to delta format."""
+        async def _generator():
+            try:
+                if not hasattr(response, "choices") or not response.choices:
+                    yield {"content": "No response from model"}
+                    return
+
+                choice = response.choices[0]
+                message = choice.message
+
+                # Yield content
+                if message.content:
+                    yield {"content": message.content}
+
+                # Yield tool calls
+                if hasattr(message, "tool_calls") and message.tool_calls:
+                    tool_inputs = []
+                    for tc in message.tool_calls:
+                        tool_inputs.append(
+                            llm.ToolInput(
+                                id=tc.id,
+                                tool_name=tc.function.name,
+                                tool_args=__import__("json").loads(
+                                    tc.function.arguments
+                                )
+                                if tc.function.arguments
+                                else {},
+                            )
                         )
-                        result = await tool.async_call(
-                            self.hass, tool_input, llm_context
-                        )
-                        return result
-                    except Exception as err:
-                        _LOGGER.error("Error executing tool %s: %s", tool_name, err)
-                        return {"error": str(err)}
+                    yield {"tool_calls": tool_inputs}
 
-        return {"error": f"Tool {tool_name} not found"}
+            except Exception as err:
+                _LOGGER.error("Error processing response: %s", err)
+                yield {"content": f"Error: {err}"}
 
-    def _process_non_streaming_response(
-        self, response: Any
-    ) -> StreamResult:
-        """Process non-streaming response."""
-        try:
-            if not hasattr(response, "choices") or not response.choices:
-                return StreamResult(content="No response from model")
-
-            choice = response.choices[0]
-            message = choice.message
-
-            content = message.content or ""
-            tool_calls = {}
-
-            if hasattr(message, "tool_calls") and message.tool_calls:
-                for i, tc in enumerate(message.tool_calls):
-                    tool_calls[i] = {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments,
-                        },
-                    }
-
-            return StreamResult(
-                content=content,
-                tool_calls=tool_calls,
-                finish_reason=choice.finish_reason,
-            )
-
-        except Exception as err:
-            _LOGGER.error("Error processing response: %s", err)
-            return StreamResult(content=f"Error: {err}")
-
-    async def _process_streaming_response(
-        self, stream: Any
-    ) -> StreamResult:
-        """Process streaming response."""
-        processor = StreamingProcessor()
-        return await processor.process_stream(stream)
+        return _generator()
 
 
 async def async_setup_entry(
