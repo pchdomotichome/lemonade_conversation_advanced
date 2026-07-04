@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import aiohttp
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
@@ -273,15 +273,15 @@ class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{server_url}/v1/health",
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                if resp.status >= 400:
-                    raise Exception(f"HTTP {resp.status}")
-                await resp.json()
+        session = async_get_clientsession(self.hass)
+        async with session.get(
+            f"{server_url}/v1/health",
+            headers=headers,
+            timeout=__import__("aiohttp").ClientTimeout(total=10),
+        ) as resp:
+            if resp.status >= 400:
+                raise Exception(f"HTTP {resp.status}")
+            await resp.json()
 
     async def _fetch_models(self) -> list[dict[str, Any]]:
         """Fetch available models from Lemonade Server."""
@@ -289,16 +289,16 @@ class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{self._server_url}/v1/models",
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                if resp.status >= 400:
-                    return []
-                data = await resp.json()
-                return data.get("data", [])
+        session = async_get_clientsession(self.hass)
+        async with session.get(
+            f"{self._server_url}/v1/models",
+            headers=headers,
+            timeout=__import__("aiohttp").ClientTimeout(total=10),
+        ) as resp:
+            if resp.status >= 400:
+                return []
+            data = await resp.json()
+            return data.get("data", [])
 
     @staticmethod
     @callback
