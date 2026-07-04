@@ -4,7 +4,7 @@ from __future__ import annotations
 
 DOMAIN = "lemonade_conversation_advanced"
 NAME = "Lemonade Conversation Advanced"
-VERSION = "0.1.1"
+VERSION = "0.2.0"
 
 # Configuration keys
 CONF_SERVER_URL = "server_url"
