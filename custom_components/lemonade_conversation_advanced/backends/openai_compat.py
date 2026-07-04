@@ -190,7 +190,7 @@ class LemonadeOpenAICompatBackend:
         **kwargs,
     ) -> AsyncIterator[ChatCompletionChunk]:
         """Stream chat completion using OpenAI client."""
-        stream = await self.client.openai_stream_chat_completion(
+        async for chunk in self.client.openai_stream_chat_completion(
             model=model,
             messages=messages,
             temperature=temperature,
@@ -198,8 +198,7 @@ class LemonadeOpenAICompatBackend:
             tools=tools,
             tool_choice=tool_choice,
             **kwargs,
-        )
-        async for chunk in stream:
+        ):
             yield chunk
 
     async def health_check(self) -> Dict[str, Any]:
