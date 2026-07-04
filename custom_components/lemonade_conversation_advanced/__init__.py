@@ -67,7 +67,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     }
 
     # Register LLM API
-    from homeassistant.components.llm import async_register_api
+    from homeassistant.helpers.llm import async_register_api
     from .llm_api import LemonadeLLMAPI
 
     llm_api = LemonadeLLMAPI(hass, entry, backend)
@@ -95,7 +95,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await async_unload_services(hass, entry)
 
     # Unregister LLM API
-    from homeassistant.components.llm import async_unregister_api
+    from homeassistant.helpers.llm import async_unregister_api
     async_unregister_api(hass, LLM_API_NAME)
 
     # Unload platforms

@@ -6,7 +6,7 @@ import logging
 from typing import Any, Dict
 
 import voluptuous as vol
-from homeassistant.components.llm import API, APIInstance, LLMContext, Tool, ToolInput
+from homeassistant.helpers.llm import API, APIInstance, LLMContext, Tool, ToolInput
 from homeassistant.core import HomeAssistant
 
 from .backends.openai_compat import LemonadeOpenAICompatBackend
