@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 
 from .backends.openai_compat import LemonadeOpenAICompatBackend
 from .const import (
+    DOMAIN,
     LLM_API_DESCRIPTION,
     LLM_API_NAME,
     TOOL_GET_STATS,
