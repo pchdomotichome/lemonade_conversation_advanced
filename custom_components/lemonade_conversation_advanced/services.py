@@ -16,9 +16,13 @@ from .const import (
     CONF_API_KEY,
     CONF_DEFAULT_MODEL,
     CONF_MAX_TOKENS,
+    CONF_PROMPT,
     CONF_SERVER_URL,
     CONF_STREAMING,
     CONF_TEMPERATURE,
+    CONF_TIMEOUT,
+    CONF_TOP_K,
+    CONF_TOP_P,
     DOMAIN,
 )
 from .exceptions import LemonadeError
@@ -138,8 +142,12 @@ async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
             (CONF_API_KEY, new_data),
             (CONF_DEFAULT_MODEL, new_options),
             (CONF_TEMPERATURE, new_options),
+            (CONF_TOP_P, new_options),
+            (CONF_TOP_K, new_options),
             (CONF_MAX_TOKENS, new_options),
             (CONF_STREAMING, new_options),
+            (CONF_PROMPT, new_options),
+            (CONF_TIMEOUT, new_options),
         ]:
             if key in call.data:
                 target[key] = call.data[key]
@@ -181,7 +189,7 @@ async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
     hass.services.async_register(DOMAIN, "get_stats", get_stats, schema=vol.Schema(service_schema_with_entry), supports_response=SupportsResponse.ONLY)
     hass.services.async_register(DOMAIN, "set_default_model", set_default_model, schema=vol.Schema({**service_schema_with_entry, vol.Required("model_name"): cv.string}), supports_response=SupportsResponse.ONLY)
     hass.services.async_register(DOMAIN, "query_image", query_image, schema=vol.Schema({**service_schema_with_entry, vol.Required("image_url"): cv.string, vol.Required("prompt"): cv.string, vol.Optional("model"): cv.string}), supports_response=SupportsResponse.ONLY)
-    hass.services.async_register(DOMAIN, "update_config", update_config, schema=vol.Schema({**service_schema_with_entry, vol.Optional(CONF_SERVER_URL): cv.string, vol.Optional(CONF_API_KEY): cv.string, vol.Optional(CONF_DEFAULT_MODEL): cv.string, vol.Optional(CONF_TEMPERATURE): vol.Coerce(float), vol.Optional(CONF_MAX_TOKENS): vol.Coerce(int), vol.Optional(CONF_STREAMING): cv.boolean}), supports_response=SupportsResponse.ONLY)
+    hass.services.async_register(DOMAIN, "update_config", update_config, schema=vol.Schema({**service_schema_with_entry, vol.Optional(CONF_SERVER_URL): cv.string, vol.Optional(CONF_API_KEY): cv.string, vol.Optional(CONF_DEFAULT_MODEL): cv.string, vol.Optional(CONF_TEMPERATURE): vol.Coerce(float), vol.Optional(CONF_TOP_P): vol.Coerce(float), vol.Optional(CONF_TOP_K): vol.Coerce(int), vol.Optional(CONF_MAX_TOKENS): vol.Coerce(int), vol.Optional(CONF_STREAMING): cv.boolean, vol.Optional(CONF_PROMPT): cv.string, vol.Optional(CONF_TIMEOUT): vol.Coerce(int)}), supports_response=SupportsResponse.ONLY)
 
     _LOGGER.info("Lemonade Conversation Advanced services registered")
 

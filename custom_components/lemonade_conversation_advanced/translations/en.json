@@ -236,6 +236,14 @@
           "name": "Temperature",
           "description": "New default temperature"
         },
+        "top_p": {
+          "name": "Top P",
+          "description": "Nucleus sampling parameter"
+        },
+        "top_k": {
+          "name": "Top K",
+          "description": "Top-K sampling parameter"
+        },
         "max_tokens": {
           "name": "Max Tokens",
           "description": "New default max tokens"
@@ -243,6 +251,14 @@
         "streaming": {
           "name": "Streaming",
           "description": "Enable streaming responses"
+        },
+        "prompt": {
+          "name": "System Prompt",
+          "description": "Custom system prompt for the agent"
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "Request timeout in seconds"
         }
       }
     }
