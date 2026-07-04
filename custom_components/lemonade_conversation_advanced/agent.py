@@ -31,7 +31,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     DOMAIN,
     CONF_PROFILE_NAME,
-    CONF_LMSTUDIO_URL,
+    CONF_SERVER_URL,
     CONF_MODEL_NAME,
     CONF_LEMONADE_PORT,
     CONF_SYSTEM_PROMPT,
@@ -155,10 +155,10 @@ class LemonadeConversationEntity(ConversationEntity):
         # OpenAI now reads from config (like local servers) instead of static constant
         if self.server_type == SERVER_TYPE_OPENAI:
             # Read URL from config (defaults to official OpenAI URL if not set)
-            # Uses same CONF_LMSTUDIO_URL field as local servers
+            # Uses same CONF_SERVER_URL field as local servers
             url = self.entry.options.get(
-                CONF_LMSTUDIO_URL,
-                self.entry.data.get(CONF_LMSTUDIO_URL, OPENAI_BASE_URL)
+                CONF_SERVER_URL,
+                self.entry.data.get(CONF_SERVER_URL, OPENAI_BASE_URL)
             ).rstrip("/")
             self.base_url = url
             _LOGGER.info("🌐 AGENT: Using OpenAI-compatible URL: %s", self.base_url)
@@ -223,7 +223,7 @@ class LemonadeConversationEntity(ConversationEntity):
         else:
             # LM Studio, Ollama, llamacpp, OpenClaw, vLLM - read dynamically
             return self.entry.options.get(
-                CONF_LMSTUDIO_URL, self.entry.data.get(CONF_LMSTUDIO_URL, "")
+                CONF_SERVER_URL, self.entry.data.get(CONF_SERVER_URL, "")
             ).rstrip("/")
 
     @property
