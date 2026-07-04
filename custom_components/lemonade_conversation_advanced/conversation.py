@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import MATCH_ALL
 
 from .backends.openai_compat import LemonadeOpenAICompatBackend
 from .const import CONF_DEFAULT_MODEL, CONF_MAX_TOKENS, CONF_STREAMING, CONF_TEMPERATURE, DOMAIN
@@ -15,7 +16,7 @@ from .utils import strip_thinking_blocks
 _LOGGER = logging.getLogger(__name__)
 
 
-class LemonadeConversationAgent(conversation.ConversationEntity, conversation.AbstractConversationAgent):
+class LemonadeConversationAgent(conversation.ConversationEntity):
     """Lemonade Conversation Agent."""
 
     _attr_has_entity_name = True
@@ -29,9 +30,9 @@ class LemonadeConversationAgent(conversation.ConversationEntity, conversation.Ab
         self._attr_supported_features = conversation.ConversationEntityFeature.CONTROL
 
     @property
-    def supported_languages(self) -> List[str]:
+    def supported_languages(self):
         """Return supported languages."""
-        return ["*"]
+        return MATCH_ALL
 
     @property
     def supported_features(self) -> int:
@@ -141,6 +142,3 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:
     data = hass.data[DOMAIN][entry.entry_id]
     agent = LemonadeConversationAgent(entry, data["backend"])
     async_add_entities([agent])
-    result = conversation.async_set_agent(hass, entry, agent)
-    if callable(result):
-        entry.async_on_unload(result)
