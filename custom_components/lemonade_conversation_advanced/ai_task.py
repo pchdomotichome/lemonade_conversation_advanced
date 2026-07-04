@@ -6,10 +6,10 @@ import logging
 from typing import Any
 
 from homeassistant.components.ai_task import (
-    AiTaskEntity,
-    AiTaskEntityFeature,
-    AsyncGenerateContentCallback,
-    GenerateContent,
+    AITaskEntity,
+    AITaskEntityFeature,
+    GenDataTask,
+    GenDataTaskResult,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -20,11 +20,11 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
-class LemonadeSummarizeTask(AiTaskEntity):
+class LemonadeSummarizeTask(AITaskEntity):
     """AI Task entity for summarization."""
 
     _attr_name = "Lemonade Summarize"
-    _attr_supported_features = AiTaskEntityFeature.GENERATE
+    _attr_supported_features = AITaskEntityFeature.GENERATE_DATA
 
     def __init__(self, entry: ConfigEntry) -> None:
         """Initialize the task."""
@@ -41,25 +41,21 @@ class LemonadeSummarizeTask(AiTaskEntity):
             "model": "Lemonade Server",
         }
 
-    async def async_generate_content(
-        self,
-        user_input: str,
-        callback: AsyncGenerateContentCallback | None = None,
-        **kwargs: Any,
-    ) -> GenerateContent:
-        """Generate content."""
-        # TODO: Implement with backend
-        return GenerateContent(
-            content=f"Summary of: {user_input[:100]}...",
-            response_type="application/text",
+    async def _async_generate_data(
+        self, task: GenDataTask, chat_log: Any
+    ) -> GenDataTaskResult:
+        """Generate data."""
+        return GenDataTaskResult(
+            conversation_id=chat_log.conversation_id,
+            data=f"Summary of: {task.instructions[:100]}...",
         )
 
 
-class LemonadeExtractEntitiesTask(AiTaskEntity):
+class LemonadeExtractEntitiesTask(AITaskEntity):
     """AI Task entity for entity extraction."""
 
     _attr_name = "Lemonade Extract Entities"
-    _attr_supported_features = AiTaskEntityFeature.GENERATE
+    _attr_supported_features = AITaskEntityFeature.GENERATE_DATA
 
     def __init__(self, entry: ConfigEntry) -> None:
         """Initialize the task."""
@@ -76,25 +72,21 @@ class LemonadeExtractEntitiesTask(AiTaskEntity):
             "model": "Lemonade Server",
         }
 
-    async def async_generate_content(
-        self,
-        user_input: str,
-        callback: AsyncGenerateContentCallback | None = None,
-        **kwargs: Any,
-    ) -> GenerateContent:
-        """Generate content."""
-        # TODO: Implement with backend
-        return GenerateContent(
-            content=f"Entities extracted from: {user_input[:100]}...",
-            response_type="application/json",
+    async def _async_generate_data(
+        self, task: GenDataTask, chat_log: Any
+    ) -> GenDataTaskResult:
+        """Generate data."""
+        return GenDataTaskResult(
+            conversation_id=chat_log.conversation_id,
+            data=f"Entities extracted from: {task.instructions[:100]}...",
         )
 
 
-class LemonadeIntentClassifierTask(AiTaskEntity):
+class LemonadeIntentClassifierTask(AITaskEntity):
     """AI Task entity for intent classification."""
 
     _attr_name = "Lemonade Intent Classifier"
-    _attr_supported_features = AiTaskEntityFeature.GENERATE
+    _attr_supported_features = AITaskEntityFeature.GENERATE_DATA
 
     def __init__(self, entry: ConfigEntry) -> None:
         """Initialize the task."""
@@ -111,25 +103,21 @@ class LemonadeIntentClassifierTask(AiTaskEntity):
             "model": "Lemonade Server",
         }
 
-    async def async_generate_content(
-        self,
-        user_input: str,
-        callback: AsyncGenerateContentCallback | None = None,
-        **kwargs: Any,
-    ) -> GenerateContent:
-        """Generate content."""
-        # TODO: Implement with backend
-        return GenerateContent(
-            content=f"Intent classified for: {user_input[:100]}...",
-            response_type="application/json",
+    async def _async_generate_data(
+        self, task: GenDataTask, chat_log: Any
+    ) -> GenDataTaskResult:
+        """Generate data."""
+        return GenDataTaskResult(
+            conversation_id=chat_log.conversation_id,
+            data=f"Intent classified for: {task.instructions[:100]}...",
         )
 
 
-class LemonadeThemeGeneratorTask(AiTaskEntity):
+class LemonadeThemeGeneratorTask(AITaskEntity):
     """AI Task entity for theme generation."""
 
     _attr_name = "Lemonade Theme Generator"
-    _attr_supported_features = AiTaskEntityFeature.GENERATE
+    _attr_supported_features = AITaskEntityFeature.GENERATE_DATA
 
     def __init__(self, entry: ConfigEntry) -> None:
         """Initialize the task."""
@@ -146,17 +134,13 @@ class LemonadeThemeGeneratorTask(AiTaskEntity):
             "model": "Lemonade Server",
         }
 
-    async def async_generate_content(
-        self,
-        user_input: str,
-        callback: AsyncGenerateContentCallback | None = None,
-        **kwargs: Any,
-    ) -> GenerateContent:
-        """Generate content."""
-        # TODO: Implement with backend
-        return GenerateContent(
-            content=f"Theme generated for: {user_input[:100]}...",
-            response_type="application/yaml",
+    async def _async_generate_data(
+        self, task: GenDataTask, chat_log: Any
+    ) -> GenDataTaskResult:
+        """Generate data."""
+        return GenDataTaskResult(
+            conversation_id=chat_log.conversation_id,
+            data=f"Theme generated for: {task.instructions[:100]}...",
         )
 
 
