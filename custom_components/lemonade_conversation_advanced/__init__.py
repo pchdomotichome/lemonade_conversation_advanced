@@ -67,23 +67,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "entry": entry,
     }
 
-    # Create default conversation subentry if none exist
-    if not any(
-        sub.subentry_type == "conversation"
-        for sub in entry.subentries.values()
-    ):
-        entry.async_add_subentry(
-            ConfigSubentry(
-                data={
-                    CONF_DEFAULT_MODEL: entry.data.get(CONF_DEFAULT_MODEL, ""),
-                    CONF_LLM_HASS_API: "conversation",
-                    "name": "Default",
-                },
-                subentry_type="conversation",
-                title="Default",
-            )
-        )
-
     # Forward setup to platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

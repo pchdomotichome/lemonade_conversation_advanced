@@ -6,7 +6,7 @@ import logging
 from typing import Any, Literal, override
 
 from homeassistant.components import conversation
-from homeassistant.config_entries import ConfigEntry, ConfigSubentry
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PROMPT, MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import intent
@@ -33,33 +33,30 @@ from .const import (
     DEFAULT_TOP_P,
     DOMAIN,
 )
-from .entity import LemonadeBaseEntity
 from .streaming import StreamingProcessor, StreamResult
 from .tools import get_ha_bridge_tools
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class LemonadeConversationEntity(
-    LemonadeBaseEntity, conversation.ConversationEntity
-):
+class LemonadeConversationEntity(conversation.ConversationEntity):
     """Lemonade Conversation Agent with tool calling and streaming."""
 
+    _attr_has_entity_name = True
     _attr_name = None
 
     def __init__(
         self,
         entry: ConfigEntry,
-        subentry: ConfigSubentry,
         backend: LemonadeOpenAICompatBackend,
     ) -> None:
         """Initialize the agent."""
-        super().__init__(entry, subentry)
+        self.entry = entry
         self.backend = backend
-        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_{subentry.entry_id}"
+        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_agent"
 
         # Enable CONTROL feature if LLM API is configured
-        if self.subentry.data.get(CONF_LLM_HASS_API):
+        if entry.data.get(CONF_LLM_HASS_API):
             self._attr_supported_features = (
                 conversation.ConversationEntityFeature.CONTROL
             )
@@ -77,7 +74,7 @@ class LemonadeConversationEntity(
         chat_log: conversation.ChatLog,
     ) -> conversation.ConversationResult:
         """Process the user input and call the API."""
-        options = self.subentry.data
+        options = self.entry.data
 
         # Provide LLM data (entities, tools, system prompt)
         try:
@@ -391,14 +388,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up conversation entities from config entry."""
+    """Set up conversation entity."""
     data = hass.data[DOMAIN][config_entry.entry_id]
     backend = data["backend"]
-
-    for subentry_id, subentry in config_entry.subentries.items():
-        if subentry.subentry_type != "conversation":
-            continue
-        async_add_entities(
-            [LemonadeConversationEntity(config_entry, subentry, backend)],
-            config_subentry_id=subentry_id,
-        )
+    async_add_entities([LemonadeConversationEntity(config_entry, backend)])
