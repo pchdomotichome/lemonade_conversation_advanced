@@ -190,23 +190,10 @@ class LemonadeConversationEntity(ConversationEntity):
         )
 
     def _get_shared_setting(self, key: str, default: Any) -> Any:
-        """Get a shared setting from system entry with fallback to profile entry."""
-        # Import here to avoid circular dependency
-        from . import get_system_entry
-
-        # Try to get from system entry first
-        system_entry = get_system_entry(self.hass)
-        if system_entry:
-            value = system_entry.options.get(key, system_entry.data.get(key))
-            if value is not None:
-                return value
-
-        # Fallback to profile entry for backward compatibility
+        """Get a setting from entry options/data with fallback to default."""
         value = self.entry.options.get(key, self.entry.data.get(key))
         if value is not None:
             return value
-
-        # Return default
         return default
 
     # Dynamic configuration properties - read from entry.options/data each time
