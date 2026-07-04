@@ -25,12 +25,31 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
+class _LemonadeTool(Tool):
+    """Tool that delegates async_call to a bound method."""
+
+    def __init__(self, name: str, description: str, parameters: vol.Schema, func) -> None:
+        super().__init__()
+        self.name = name
+        self.description = description
+        self.parameters = parameters
+        self._func = func
+
+    async def async_call(self, hass: HomeAssistant, tool_input: ToolInput, llm_context: LLMContext) -> Dict[str, Any]:
+        return await self._func(hass, tool_input, llm_context)
+
+
+def _make_tool(name: str, description: str, parameters: vol.Schema, func) -> Tool:
+    """Create an llm Tool instance."""
+    return _LemonadeTool(name=name, description=description, parameters=parameters, func=func)
+
+
 class LemonadeLLMAPI(API):
     """Custom LLM API for Lemonade Server management tools."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, backend: LemonadeOpenAICompatBackend) -> None:
         """Initialize the API."""
-        super().__init__(hass, f"{DOMAIN}-{entry.entry_id}", LLM_API_NAME)
+        super().__init__(hass=hass, id=f"{DOMAIN}-{entry.entry_id}", name=LLM_API_NAME)
         self.entry = entry
         self.backend = backend
         self._description = LLM_API_DESCRIPTION
@@ -38,42 +57,12 @@ class LemonadeLLMAPI(API):
     async def async_get_api_instance(self, llm_context: LLMContext) -> APIInstance:
         """Return the API instance with tools."""
         tools = [
-            Tool(
-                name=TOOL_PULL_MODEL,
-                description="Download/pull a model from Lemonade registry or Hugging Face",
-                parameters=vol.Schema({vol.Required("model_name"): str, vol.Optional("checkpoint"): str, vol.Optional("recipe"): str}),
-                func=self._pull_model,
-            ),
-            Tool(
-                name=TOOL_LOAD_MODEL,
-                description="Load a model into memory for inference",
-                parameters=vol.Schema({vol.Required("model_name"): str, vol.Optional("ctx_size"): vol.Coerce(int), vol.Optional("gpu_layers"): vol.Coerce(int), vol.Optional("backend"): str}),
-                func=self._load_model,
-            ),
-            Tool(
-                name=TOOL_UNLOAD_MODEL,
-                description="Unload a model from memory",
-                parameters=vol.Schema({vol.Required("model_name"): str}),
-                func=self._unload_model,
-            ),
-            Tool(
-                name=TOOL_LIST_MODELS,
-                description="List available models on Lemonade Server",
-                parameters=vol.Schema({vol.Optional("show_all"): bool}),
-                func=self._list_models,
-            ),
-            Tool(
-                name=TOOL_SYSTEM_INFO,
-                description="Get system information: hardware, backends, loaded models",
-                parameters=vol.Schema({}),
-                func=self._system_info,
-            ),
-            Tool(
-                name=TOOL_GET_STATS,
-                description="Get performance statistics from last inference",
-                parameters=vol.Schema({}),
-                func=self._get_stats,
-            ),
+            _make_tool(TOOL_PULL_MODEL, "Download/pull a model from Lemonade registry or Hugging Face", vol.Schema({vol.Required("model_name"): str, vol.Optional("checkpoint"): str, vol.Optional("recipe"): str}), self._pull_model),
+            _make_tool(TOOL_LOAD_MODEL, "Load a model into memory for inference", vol.Schema({vol.Required("model_name"): str, vol.Optional("ctx_size"): vol.Coerce(int), vol.Optional("gpu_layers"): vol.Coerce(int), vol.Optional("backend"): str}), self._load_model),
+            _make_tool(TOOL_UNLOAD_MODEL, "Unload a model from memory", vol.Schema({vol.Required("model_name"): str}), self._unload_model),
+            _make_tool(TOOL_LIST_MODELS, "List available models on Lemonade Server", vol.Schema({vol.Optional("show_all"): bool}), self._list_models),
+            _make_tool(TOOL_SYSTEM_INFO, "Get system information: hardware, backends, loaded models", vol.Schema({}), self._system_info),
+            _make_tool(TOOL_GET_STATS, "Get performance statistics from last inference", vol.Schema({}), self._get_stats),
         ]
         return APIInstance(api=self, api_prompt=self._description, llm_context=llm_context, tools=tools)
 
