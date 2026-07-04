@@ -163,6 +163,9 @@ class LemonadeSubentryFlowHandler(ConfigSubentryFlow):
 class ConversationFlowHandler(LemonadeSubentryFlowHandler):
     """Handle conversation subentry flow."""
 
+    _subentry_type = "conversation"
+    _title = "Lemonade Assistant"
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
@@ -183,8 +186,11 @@ class ConversationFlowHandler(LemonadeSubentryFlowHandler):
             return self.async_abort(reason="entry_not_loaded")
 
         if user_input is not None:
-            # Remove empty LLM API
-            if not user_input.get(CONF_LLM_HASS_API):
+            # Store LLM API as list
+            llm_api = user_input.get(CONF_LLM_HASS_API)
+            if isinstance(llm_api, str):
+                user_input[CONF_LLM_HASS_API] = [llm_api]
+            elif not llm_api:
                 user_input.pop(CONF_LLM_HASS_API, None)
 
             return self.async_create_entry(
@@ -226,7 +232,6 @@ class ConversationFlowHandler(LemonadeSubentryFlowHandler):
                     ),
                     vol.Optional(
                         CONF_LLM_HASS_API,
-                        description={"suggested_value": ["conversation"]},
                     ): SelectSelector(
                         SelectSelectorConfig(
                             options=hass_apis, multiple=True
@@ -300,6 +305,9 @@ class ConversationFlowHandler(LemonadeSubentryFlowHandler):
 class AITaskFlowHandler(LemonadeSubentryFlowHandler):
     """Handle AI task subentry flow."""
 
+    _subentry_type = "ai_task"
+    _title = "Lemonade AI Task"
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
@@ -346,6 +354,13 @@ class AITaskFlowHandler(LemonadeSubentryFlowHandler):
                             ],
                             mode=SelectSelectorMode.DROPDOWN,
                             sort=True,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_PROMPT, default=DEFAULT_PROMPT
+                    ): TextSelector(
+                        TextSelectorConfig(
+                            type=TextSelectorType.TEXT, multiline=True
                         )
                     ),
                 }
