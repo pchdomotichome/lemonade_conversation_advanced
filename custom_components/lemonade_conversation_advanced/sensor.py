@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any, Dict, Optional
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription, SensorStateClass
@@ -50,7 +51,7 @@ class LemonadeDataCoordinator(DataUpdateCoordinator):
 
     def __init__(self, hass: HomeAssistant, backend: LemonadeOpenAICompatBackend) -> None:
         """Initialize coordinator."""
-        super().__init__(hass, _LOGGER, name="Lemonade Server Data", update_interval=30)
+        super().__init__(hass, _LOGGER, name="Lemonade Server Data", update_interval=timedelta(seconds=30))
         self.backend = backend
 
     async def _async_update_data(self) -> LemonadeSensorData:

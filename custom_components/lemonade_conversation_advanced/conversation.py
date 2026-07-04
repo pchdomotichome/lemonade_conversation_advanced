@@ -29,6 +29,11 @@ class LemonadeConversationAgent(conversation.ConversationEntity, conversation.Ab
         self._attr_supported_features = conversation.ConversationEntityFeature.CONTROL
 
     @property
+    def supported_languages(self) -> List[str]:
+        """Return supported languages."""
+        return ["*"]
+
+    @property
     def supported_features(self) -> int:
         """Return supported features."""
         return self._attr_supported_features
