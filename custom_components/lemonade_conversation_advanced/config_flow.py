@@ -271,24 +271,34 @@ class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Test connection to Lemonade Server."""
         import aiohttp
 
+        # Ensure URL has protocol
+        if not server_url.startswith(("http://", "https://")):
+            server_url = f"http://{server_url}"
+
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
         session = async_get_clientsession(self.hass)
         try:
+            _LOGGER.debug("Testing connection to: %s", server_url)
             async with session.get(
                 f"{server_url}/v1/health",
                 headers=headers,
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
+                _LOGGER.debug("Response status: %s", resp.status)
                 if resp.status >= 400:
-                    raise Exception(f"HTTP {resp.status}: {resp.reason}")
+                    text = await resp.text()
+                    raise Exception(f"HTTP {resp.status}: {text}")
                 data = await resp.json()
                 _LOGGER.debug("Lemonade Server health: %s", data)
         except aiohttp.ClientError as err:
             _LOGGER.error("Connection error to %s: %s", server_url, err)
             raise Exception(f"Cannot connect to {server_url}: {err}") from err
+        except Exception as err:
+            _LOGGER.error("Connection test failed: %s", err)
+            raise
 
     async def _fetch_models(self) -> list[dict[str, Any]]:
         """Fetch available models from Lemonade Server."""
