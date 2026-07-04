@@ -8,6 +8,7 @@ from typing import Any, Dict
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import MATCH_ALL
+from homeassistant.helpers import intent
 
 from .backends.openai_compat import LemonadeOpenAICompatBackend
 from .const import CONF_DEFAULT_MODEL, CONF_MAX_TOKENS, CONF_STREAMING, CONF_TEMPERATURE, DOMAIN
@@ -51,20 +52,22 @@ class LemonadeConversationAgent(conversation.ConversationEntity):
 
     async def async_process(self, user_input: conversation.ConversationInput) -> conversation.ConversationResult:
         """Process a conversation request."""
-        config = self.entry.data
-        options = self.entry.options
-        model = options.get(CONF_DEFAULT_MODEL, config.get(CONF_DEFAULT_MODEL))
-        temperature = options.get(CONF_TEMPERATURE, 0.7)
-        max_tokens = options.get(CONF_MAX_TOKENS, 512)
-        streaming = options.get(CONF_STREAMING, True)
-
-        messages = []
-        system_prompt = getattr(user_input.agent_info, "system_prompt", None)
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": user_input.text})
-
         try:
+            config = self.entry.data
+            options = self.entry.options
+            model = options.get(CONF_DEFAULT_MODEL, config.get(CONF_DEFAULT_MODEL))
+            temperature = options.get(CONF_TEMPERATURE, 0.7)
+            max_tokens = options.get(CONF_MAX_TOKENS, 512)
+            streaming = options.get(CONF_STREAMING, True)
+
+            messages = []
+            agent_info = getattr(user_input, "agent_info", None)
+            if agent_info is not None:
+                system_prompt = getattr(agent_info, "system_prompt", None)
+                if system_prompt:
+                    messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": user_input.text})
+
             response = await self.backend.chat_completion(
                 model=model,
                 messages=messages,
@@ -73,44 +76,39 @@ class LemonadeConversationAgent(conversation.ConversationEntity):
                 stream=streaming,
             )
             if streaming:
-                return await self._process_streaming_response(response, user_input.conversation_id)
-            return self._process_response(response, user_input.conversation_id)
+                return await self._process_streaming_response(response, user_input.conversation_id, user_input.language)
+            return self._process_response(response, user_input.conversation_id, user_input.language)
         except Exception as err:
             _LOGGER.error("Error processing conversation: %s", err)
+            intent_response = intent.IntentResponse(language=user_input.language)
+            intent_response.async_set_speech(f"Error processing request: {err}")
             return conversation.ConversationResult(
-                response=conversation.ConversationResponse(
-                    response_type=conversation.ConversationResponseType.ERROR,
-                    error_code="unknown",
-                    message=f"Error processing request: {err}",
-                ),
+                response=intent_response,
                 conversation_id=user_input.conversation_id,
             )
 
-    def _process_response(self, response: Any, conversation_id: str | None) -> conversation.ConversationResult:
+    def _process_response(self, response: Any, conversation_id: str | None, language: str) -> conversation.ConversationResult:
         """Process non-streaming response."""
         try:
             if hasattr(response, "choices") and response.choices:
                 content = response.choices[0].message.content or ""
                 content = strip_thinking_blocks(content)
+                intent_response = intent.IntentResponse(language=language)
+                intent_response.async_set_speech(content)
                 return conversation.ConversationResult(
-                    response=conversation.ConversationResponse(
-                        response_type=conversation.ConversationResponseType.ACTION_DONE,
-                        speech={"plain": {"speech": content, "extra_data": None}},
-                    ),
+                    response=intent_response,
                     conversation_id=conversation_id,
                 )
         except Exception as err:
             _LOGGER.error("Error parsing response: %s", err)
+        intent_response = intent.IntentResponse(language=language)
+        intent_response.async_set_speech("Failed to parse response")
         return conversation.ConversationResult(
-            response=conversation.ConversationResponse(
-                response_type=conversation.ConversationResponseType.ERROR,
-                error_code="unknown",
-                message="Failed to parse response",
-            ),
+            response=intent_response,
             conversation_id=conversation_id,
         )
 
-    async def _process_streaming_response(self, stream: Any, conversation_id: str | None) -> conversation.ConversationResult:
+    async def _process_streaming_response(self, stream: Any, conversation_id: str | None, language: str) -> conversation.ConversationResult:
         """Process streaming response."""
         try:
             full_content = ""
@@ -118,21 +116,18 @@ class LemonadeConversationAgent(conversation.ConversationEntity):
                 if chunk.choices and chunk.choices[0].delta.content:
                     full_content += chunk.choices[0].delta.content
             full_content = strip_thinking_blocks(full_content)
+            intent_response = intent.IntentResponse(language=language)
+            intent_response.async_set_speech(full_content)
             return conversation.ConversationResult(
-                response=conversation.ConversationResponse(
-                    response_type=conversation.ConversationResponseType.ACTION_DONE,
-                    speech={"plain": {"speech": full_content, "extra_data": None}},
-                ),
+                response=intent_response,
                 conversation_id=conversation_id,
             )
         except Exception as err:
             _LOGGER.error("Error processing streaming response: %s", err)
+            intent_response = intent.IntentResponse(language=language)
+            intent_response.async_set_speech(f"Streaming error: {err}")
             return conversation.ConversationResult(
-                response=conversation.ConversationResponse(
-                    response_type=conversation.ConversationResponseType.ERROR,
-                    error_code="unknown",
-                    message=f"Streaming error: {err}",
-                ),
+                response=intent_response,
                 conversation_id=conversation_id,
             )
 
