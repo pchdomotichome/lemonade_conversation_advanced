@@ -269,36 +269,50 @@ class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, server_url: str, api_key: str | None
     ) -> None:
         """Test connection to Lemonade Server."""
+        import aiohttp
+
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
         session = async_get_clientsession(self.hass)
-        async with session.get(
-            f"{server_url}/v1/health",
-            headers=headers,
-            timeout=__import__("aiohttp").ClientTimeout(total=10),
-        ) as resp:
-            if resp.status >= 400:
-                raise Exception(f"HTTP {resp.status}")
-            await resp.json()
+        try:
+            async with session.get(
+                f"{server_url}/v1/health",
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status >= 400:
+                    raise Exception(f"HTTP {resp.status}: {resp.reason}")
+                data = await resp.json()
+                _LOGGER.debug("Lemonade Server health: %s", data)
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Connection error to %s: %s", server_url, err)
+            raise Exception(f"Cannot connect to {server_url}: {err}") from err
 
     async def _fetch_models(self) -> list[dict[str, Any]]:
         """Fetch available models from Lemonade Server."""
+        import aiohttp
+
         headers = {"Content-Type": "application/json"}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
 
         session = async_get_clientsession(self.hass)
-        async with session.get(
-            f"{self._server_url}/v1/models",
-            headers=headers,
-            timeout=__import__("aiohttp").ClientTimeout(total=10),
-        ) as resp:
-            if resp.status >= 400:
-                return []
-            data = await resp.json()
-            return data.get("data", [])
+        try:
+            async with session.get(
+                f"{self._server_url}/v1/models",
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status >= 400:
+                    _LOGGER.warning("Failed to fetch models: HTTP %s", resp.status)
+                    return []
+                data = await resp.json()
+                return data.get("data", [])
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error fetching models: %s", err)
+            return []
 
     @staticmethod
     @callback
