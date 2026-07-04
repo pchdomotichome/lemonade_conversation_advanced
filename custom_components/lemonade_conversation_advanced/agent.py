@@ -250,17 +250,19 @@ class LemonadeConversationEntity(ConversationEntity):
     @property
     def max_iterations(self) -> int:
         """Get max iterations (dynamic)."""
-        return self.entry.options.get(
+        value = self.entry.options.get(
             CONF_MAX_ITERATIONS,
             self.entry.data.get(CONF_MAX_ITERATIONS, DEFAULT_MAX_ITERATIONS),
         )
+        return int(value)
 
     @property
     def max_tokens(self) -> int:
         """Get max tokens (dynamic)."""
-        return self.entry.options.get(
+        value = self.entry.options.get(
             CONF_MAX_TOKENS, self.entry.data.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
         )
+        return int(value)
 
     @property
     def temperature(self) -> float:
@@ -372,9 +374,10 @@ class LemonadeConversationEntity(ConversationEntity):
     @property
     def timeout(self) -> int:
         """Get request timeout in seconds (dynamic)."""
-        return self.entry.options.get(
+        value = self.entry.options.get(
             CONF_TIMEOUT, self.entry.data.get(CONF_TIMEOUT, DEFAULT_TIMEOUT)
         )
+        return int(value)
 
     @property
     def session_key(self) -> str:
