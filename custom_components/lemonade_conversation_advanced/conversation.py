@@ -11,7 +11,24 @@ from homeassistant.const import MATCH_ALL
 from homeassistant.helpers import intent
 
 from .backends.openai_compat import LemonadeOpenAICompatBackend
-from .const import CONF_DEFAULT_MODEL, CONF_MAX_TOKENS, CONF_STREAMING, CONF_TEMPERATURE, DOMAIN
+from .const import (
+    CONF_DEFAULT_MODEL,
+    CONF_MAX_TOKENS,
+    CONF_PROMPT,
+    CONF_STREAMING,
+    CONF_TEMPERATURE,
+    CONF_TIMEOUT,
+    CONF_TOP_K,
+    CONF_TOP_P,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_PROMPT,
+    DEFAULT_STREAMING,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_TIMEOUT,
+    DEFAULT_TOP_K,
+    DEFAULT_TOP_P,
+    DOMAIN,
+)
 from .utils import strip_thinking_blocks
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,24 +73,28 @@ class LemonadeConversationAgent(conversation.ConversationEntity):
             config = self.entry.data
             options = self.entry.options
             model = options.get(CONF_DEFAULT_MODEL, config.get(CONF_DEFAULT_MODEL))
-            temperature = options.get(CONF_TEMPERATURE, 0.7)
-            max_tokens = options.get(CONF_MAX_TOKENS, 512)
-            streaming = options.get(CONF_STREAMING, True)
+            temperature = options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE)
+            top_p = options.get(CONF_TOP_P, DEFAULT_TOP_P)
+            top_k = options.get(CONF_TOP_K, DEFAULT_TOP_K)
+            max_tokens = options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
+            streaming = options.get(CONF_STREAMING, DEFAULT_STREAMING)
+            prompt = options.get(CONF_PROMPT, DEFAULT_PROMPT)
+            timeout = options.get(CONF_TIMEOUT, DEFAULT_TIMEOUT)
 
             messages = []
-            agent_info = getattr(user_input, "agent_info", None)
-            if agent_info is not None:
-                system_prompt = getattr(agent_info, "system_prompt", None)
-                if system_prompt:
-                    messages.append({"role": "system", "content": system_prompt})
+            if prompt:
+                messages.append({"role": "system", "content": prompt})
             messages.append({"role": "user", "content": user_input.text})
 
             response = await self.backend.chat_completion(
                 model=model,
                 messages=messages,
                 temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
                 max_tokens=max_tokens,
                 stream=streaming,
+                timeout=timeout,
             )
             if streaming:
                 return await self._process_streaming_response(response, user_input.conversation_id, user_input.language)

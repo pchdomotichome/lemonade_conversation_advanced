@@ -158,13 +158,23 @@ class LemonadeOpenAICompatBackend:
         model: str,
         messages: List[ChatCompletionMessageParam],
         temperature: float = DEFAULT_TEMPERATURE,
+        top_p: float = 0.9,
+        top_k: int = 40,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         stream: bool = False,
+        timeout: int = 30,
         tools: Optional[List[Dict]] = None,
         tool_choice: Optional[str] = None,
         **kwargs,
     ) -> ChatCompletion | AsyncIterator[ChatCompletionChunk]:
         """Get chat completion from Lemonade Server."""
+        extra_kwargs = {"timeout": timeout}
+        if top_p != 1.0:
+            extra_kwargs["top_p"] = top_p
+        if top_k:
+            extra_kwargs["top_k"] = top_k
+        extra_kwargs.update(kwargs)
+
         if stream:
             return self._stream_chat_completion(
                 model=model,
@@ -173,7 +183,7 @@ class LemonadeOpenAICompatBackend:
                 max_tokens=max_tokens,
                 tools=tools,
                 tool_choice=tool_choice,
-                **kwargs,
+                **extra_kwargs,
             )
         return await self.client.openai_chat_completion(
             model=model,
@@ -183,7 +193,7 @@ class LemonadeOpenAICompatBackend:
             stream=False,
             tools=tools,
             tool_choice=tool_choice,
-            **kwargs,
+            **extra_kwargs,
         )
 
     async def _stream_chat_completion(

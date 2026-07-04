@@ -10,20 +10,18 @@
           "api_key": "API Key (optional)"
         }
       },
-      "model": {
-        "title": "Select Model",
-        "description": "Choose a model to use for conversation.",
+      "config": {
+        "title": "Model & Parameters",
+        "description": "Select the default model and configure generation parameters.",
         "data": {
-          "default_model": "Model"
-        }
-      },
-      "parameters": {
-        "title": "Model Parameters",
-        "description": "Configure model parameters.",
-        "data": {
-          "temperature": "Temperature",
+          "default_model": "Default Model",
+          "temperature": "Temperature (creativity)",
+          "top_p": "Top P (nucleus sampling)",
+          "top_k": "Top K (diversity)",
           "max_tokens": "Max Tokens",
-          "streaming": "Enable Streaming"
+          "streaming": "Enable Streaming",
+          "prompt": "System Prompt",
+          "timeout": "Timeout (seconds)"
         }
       }
     },
@@ -40,12 +38,16 @@
     "step": {
       "init": {
         "title": "Lemonade Conversation Advanced Options",
-        "description": "Configure model parameters and behavior.",
+        "description": "Configure model parameters and agent behavior.",
         "data": {
-          "temperature": "Temperature",
+          "temperature": "Temperature (creativity)",
+          "top_p": "Top P (nucleus sampling)",
+          "top_k": "Top K (diversity)",
           "max_tokens": "Max Tokens",
           "streaming": "Enable Streaming",
-          "default_model": "Default Model"
+          "default_model": "Default Model",
+          "prompt": "System Prompt",
+          "timeout": "Timeout (seconds)"
         }
       }
     }

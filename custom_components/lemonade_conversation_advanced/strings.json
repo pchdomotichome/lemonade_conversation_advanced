@@ -1,0 +1,55 @@
+{
+  "title": "Lemonade Conversation Advanced",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Lemonade Server",
+        "description": "Enter the Lemonade Server URL and optional API key.",
+        "data": {
+          "server_url": "Server URL",
+          "api_key": "API Key (optional)"
+        }
+      },
+      "config": {
+        "title": "Model & Parameters",
+        "description": "Select the default model and configure generation parameters.",
+        "data": {
+          "default_model": "Default Model",
+          "temperature": "Temperature (creativity)",
+          "top_p": "Top P (nucleus sampling)",
+          "top_k": "Top K (diversity)",
+          "max_tokens": "Max Tokens",
+          "streaming": "Enable Streaming",
+          "prompt": "System Prompt",
+          "timeout": "Timeout (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Lemonade Server",
+      "invalid_auth": "Invalid API key",
+      "no_models": "No models available"
+    },
+    "abort": {
+      "already_configured": "This server is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Lemonade Conversation Advanced Options",
+        "description": "Configure model parameters and agent behavior.",
+        "data": {
+          "temperature": "Temperature (creativity)",
+          "top_p": "Top P (nucleus sampling)",
+          "top_k": "Top K (diversity)",
+          "max_tokens": "Max Tokens",
+          "streaming": "Enable Streaming",
+          "default_model": "Default Model",
+          "prompt": "System Prompt",
+          "timeout": "Timeout (seconds)"
+        }
+      }
+    }
+  }
+}

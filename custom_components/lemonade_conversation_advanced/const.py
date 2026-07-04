@@ -11,8 +11,12 @@ CONF_SERVER_URL = "server_url"
 CONF_API_KEY = "api_key"
 CONF_DEFAULT_MODEL = "default_model"
 CONF_TEMPERATURE = "temperature"
+CONF_TOP_P = "top_p"
+CONF_TOP_K = "top_k"
 CONF_MAX_TOKENS = "max_tokens"
 CONF_STREAMING = "streaming"
+CONF_PROMPT = "prompt"
+CONF_TIMEOUT = "timeout"
 CONF_LLM_APIS = "llm_apis"
 CONF_MODELS = "models"
 CONF_AGENTS = "agents"
@@ -33,12 +37,37 @@ CONF_AGENT_TOOLS = "tools"
 
 # Defaults
 DEFAULT_TEMPERATURE = 0.7
-DEFAULT_MAX_TOKENS = 512
+DEFAULT_TOP_P = 0.9
+DEFAULT_TOP_K = 40
+DEFAULT_MAX_TOKENS = 2048
 DEFAULT_STREAMING = True
+DEFAULT_PROMPT = """Eres un asistente de hogar inteligente llamado Lemonade.
+Tu objetivo es ayudar al usuario a controlar su hogar y responder sus preguntas.
+
+Directrices importantes:
+- Responde de manera concisa y util
+- Si no estas seguro, di que no lo sabes
+- Prioriza la seguridad y privacidad del usuario
+- Usa un tono amigable y profesional
+- Cuando controles dispositivos, confirma las acciones realizadas
+"""
+DEFAULT_TIMEOUT = 30
 DEFAULT_CTX_SIZE = 8192
 DEFAULT_GPU_LAYERS = -1
 DEFAULT_RECIPE = "llamacpp"
 DEFAULT_BACKEND = "llamacpp"
+
+# Limits
+MIN_TEMPERATURE = 0.0
+MAX_TEMPERATURE = 2.0
+MIN_TOP_P = 0.0
+MAX_TOP_P = 1.0
+MIN_TOP_K = 1
+MAX_TOP_K = 100
+MIN_MAX_TOKENS = 1
+MAX_MAX_TOKENS = 32768
+MIN_TIMEOUT = 5
+MAX_TIMEOUT = 120
 
 # Events
 EVENT_CONVERSATION_FINISHED = f"{DOMAIN}_conversation_finished"

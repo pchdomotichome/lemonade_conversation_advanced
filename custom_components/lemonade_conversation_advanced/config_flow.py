@@ -7,36 +7,51 @@ from typing import Any, Dict, List, Optional
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
 from .client import LemonadeClient
 from .const import (
     CONF_API_KEY,
     CONF_DEFAULT_MODEL,
     CONF_MAX_TOKENS,
+    CONF_PROMPT,
     CONF_SERVER_URL,
     CONF_STREAMING,
     CONF_TEMPERATURE,
+    CONF_TIMEOUT,
+    CONF_TOP_K,
+    CONF_TOP_P,
     DEFAULT_MAX_TOKENS,
+    DEFAULT_PROMPT,
     DEFAULT_STREAMING,
     DEFAULT_TEMPERATURE,
+    DEFAULT_TIMEOUT,
+    DEFAULT_TOP_K,
+    DEFAULT_TOP_P,
     DOMAIN,
+    MAX_MAX_TOKENS,
+    MAX_TEMPERATURE,
+    MAX_TIMEOUT,
+    MAX_TOP_K,
+    MAX_TOP_P,
+    MIN_MAX_TOKENS,
+    MIN_TEMPERATURE,
+    MIN_TIMEOUT,
+    MIN_TOP_K,
+    MIN_TOP_P,
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-CONNECTION_SCHEMA = vol.Schema({
-    vol.Required(CONF_SERVER_URL): str,
-    vol.Optional(CONF_API_KEY): str,
-})
-
-PARAMETERS_SCHEMA = vol.Schema({
-    vol.Optional(CONF_TEMPERATURE, default=DEFAULT_TEMPERATURE): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=2.0)),
-    vol.Optional(CONF_MAX_TOKENS, default=DEFAULT_MAX_TOKENS): vol.All(vol.Coerce(int), vol.Range(min=1, max=32768)),
-    vol.Optional(CONF_STREAMING, default=DEFAULT_STREAMING): bool,
-})
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -50,7 +65,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._server_url: str = ""
         self._api_key: Optional[str] = None
         self._model_options: List[str] = []
-        self._selected_model: str = ""
 
     async def async_step_user(self, user_input: Dict[str, Any] | None = None) -> FlowResult:
         """Handle the initial step."""
@@ -66,54 +80,62 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await client.close()
                 self._server_url = user_input[CONF_SERVER_URL]
                 self._api_key = user_input.get(CONF_API_KEY)
-                self._model_options = [model.id for model in models] if models else []
-                return await self.async_step_model()
+                self._model_options = [m.id for m in models] if models else []
+                return await self.async_step_config()
             except Exception as err:
                 _LOGGER.error("Connection test failed: %s", err)
                 errors["base"] = "cannot_connect"
         return self.async_show_form(
             step_id="user",
-            data_schema=CONNECTION_SCHEMA,
+            data_schema=vol.Schema({
+                vol.Required(CONF_SERVER_URL): TextSelector(TextSelectorConfig(type=TextSelectorType.URL)),
+                vol.Optional(CONF_API_KEY): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
+            }),
             errors=errors,
             description_placeholders={"server_url_example": "http://10.0.98.218:13305"},
         )
 
-    async def async_step_model(self, user_input: Dict[str, Any] | None = None) -> FlowResult:
-        """Handle model selection step."""
+    async def async_step_config(self, user_input: Dict[str, Any] | None = None) -> FlowResult:
+        """Handle model and parameters step."""
         errors = {}
-        no_models = "No models found - pull a model first"
-        if user_input is not None:
-            if user_input[CONF_DEFAULT_MODEL] == no_models:
-                errors[CONF_DEFAULT_MODEL] = "no_models"
-            else:
-                self._selected_model = user_input[CONF_DEFAULT_MODEL]
-                return await self.async_step_parameters()
-        schema = vol.Schema({
-            vol.Required(CONF_DEFAULT_MODEL): vol.In(self._model_options or [no_models]),
-        })
-        return self.async_show_form(step_id="model", data_schema=schema, errors=errors)
-
-    async def async_step_parameters(self, user_input: Dict[str, Any] | None = None) -> FlowResult:
-        """Handle parameters step."""
         if user_input is not None:
             data = {
                 CONF_SERVER_URL: self._server_url,
                 CONF_API_KEY: self._api_key or "",
             }
             options = {
-                CONF_DEFAULT_MODEL: self._selected_model,
+                CONF_DEFAULT_MODEL: user_input[CONF_DEFAULT_MODEL],
                 CONF_TEMPERATURE: user_input[CONF_TEMPERATURE],
+                CONF_TOP_P: user_input[CONF_TOP_P],
+                CONF_TOP_K: user_input[CONF_TOP_K],
                 CONF_MAX_TOKENS: user_input[CONF_MAX_TOKENS],
                 CONF_STREAMING: user_input[CONF_STREAMING],
+                CONF_PROMPT: user_input.get(CONF_PROMPT, DEFAULT_PROMPT),
+                CONF_TIMEOUT: user_input[CONF_TIMEOUT],
             }
             return self.async_create_entry(
                 title="Lemonade Conversation Advanced",
                 data=data,
                 options=options,
             )
-        return self.async_show_form(step_id="parameters", data_schema=PARAMETERS_SCHEMA)
+
+        no_models = "No models found - pull a model first"
+        model_options = self._model_options or [no_models]
+
+        data_schema = vol.Schema({
+            vol.Required(CONF_DEFAULT_MODEL): vol.In(model_options),
+            vol.Optional(CONF_TEMPERATURE, default=DEFAULT_TEMPERATURE): NumberSelector(NumberSelectorConfig(min=MIN_TEMPERATURE, max=MAX_TEMPERATURE, step=0.05, mode=NumberSelectorMode.SLIDER)),
+            vol.Optional(CONF_TOP_P, default=DEFAULT_TOP_P): NumberSelector(NumberSelectorConfig(min=MIN_TOP_P, max=MAX_TOP_P, step=0.05, mode=NumberSelectorMode.SLIDER)),
+            vol.Optional(CONF_TOP_K, default=DEFAULT_TOP_K): NumberSelector(NumberSelectorConfig(min=MIN_TOP_K, max=MAX_TOP_K, step=1, mode=NumberSelectorMode.BOX)),
+            vol.Optional(CONF_MAX_TOKENS, default=DEFAULT_MAX_TOKENS): NumberSelector(NumberSelectorConfig(min=MIN_MAX_TOKENS, max=MAX_MAX_TOKENS, step=256, mode=NumberSelectorMode.BOX)),
+            vol.Optional(CONF_STREAMING, default=DEFAULT_STREAMING): bool,
+            vol.Optional(CONF_PROMPT, default=DEFAULT_PROMPT): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)),
+            vol.Optional(CONF_TIMEOUT, default=DEFAULT_TIMEOUT): NumberSelector(NumberSelectorConfig(min=MIN_TIMEOUT, max=MAX_TIMEOUT, step=5, mode=NumberSelectorMode.BOX)),
+        })
+        return self.async_show_form(step_id="config", data_schema=data_schema, errors=errors)
 
     @staticmethod
+    @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
         """Get the options flow for this handler."""
         return LemonadeOptionsFlow(config_entry)
@@ -130,13 +152,19 @@ class LemonadeOptionsFlow(config_entries.OptionsFlow):
         """Manage options."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
-        schema = vol.Schema({
-            vol.Optional(CONF_TEMPERATURE, default=self.entry.options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE)): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=2.0)),
-            vol.Optional(CONF_MAX_TOKENS, default=self.entry.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)): vol.All(vol.Coerce(int), vol.Range(min=1, max=32768)),
-            vol.Optional(CONF_STREAMING, default=self.entry.options.get(CONF_STREAMING, DEFAULT_STREAMING)): bool,
-            vol.Optional(CONF_DEFAULT_MODEL, default=self.entry.options.get(CONF_DEFAULT_MODEL, "")): str,
+
+        options = self.entry.options
+        data_schema = vol.Schema({
+            vol.Optional(CONF_TEMPERATURE, default=options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE)): NumberSelector(NumberSelectorConfig(min=MIN_TEMPERATURE, max=MAX_TEMPERATURE, step=0.05, mode=NumberSelectorMode.SLIDER)),
+            vol.Optional(CONF_TOP_P, default=options.get(CONF_TOP_P, DEFAULT_TOP_P)): NumberSelector(NumberSelectorConfig(min=MIN_TOP_P, max=MAX_TOP_P, step=0.05, mode=NumberSelectorMode.SLIDER)),
+            vol.Optional(CONF_TOP_K, default=options.get(CONF_TOP_K, DEFAULT_TOP_K)): NumberSelector(NumberSelectorConfig(min=MIN_TOP_K, max=MAX_TOP_K, step=1, mode=NumberSelectorMode.BOX)),
+            vol.Optional(CONF_MAX_TOKENS, default=options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)): NumberSelector(NumberSelectorConfig(min=MIN_MAX_TOKENS, max=MAX_MAX_TOKENS, step=256, mode=NumberSelectorMode.BOX)),
+            vol.Optional(CONF_STREAMING, default=options.get(CONF_STREAMING, DEFAULT_STREAMING)): bool,
+            vol.Optional(CONF_DEFAULT_MODEL, default=options.get(CONF_DEFAULT_MODEL, "")): str,
+            vol.Optional(CONF_PROMPT, default=options.get(CONF_PROMPT, DEFAULT_PROMPT)): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)),
+            vol.Optional(CONF_TIMEOUT, default=options.get(CONF_TIMEOUT, DEFAULT_TIMEOUT)): NumberSelector(NumberSelectorConfig(min=MIN_TIMEOUT, max=MAX_TIMEOUT, step=5, mode=NumberSelectorMode.BOX)),
         })
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(step_id="init", data_schema=data_schema)
 
 
 class CannotConnect(HomeAssistantError):
