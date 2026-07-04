@@ -17,7 +17,10 @@ SERVER_TYPE_VLLM = "vllm"
 # Configuration keys
 CONF_PROFILE_NAME = "profile_name"
 CONF_SERVER_TYPE = "server_type"
+CONF_SERVER_URL = "server_url"
 CONF_API_KEY = "api_key"
+
+DEFAULT_SERVER_URL = "http://localhost:13305"
 CONF_LMSTUDIO_URL = "lmstudio_url"
 CONF_MODEL_NAME = "model_name"
 CONF_LEMONADE_PORT = "mcp_port"
