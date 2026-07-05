@@ -10,7 +10,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.data_entry_flow import FlowResult, SubentryFlowResult
+from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     NumberSelector,
@@ -470,13 +470,13 @@ class ConversationSubentryFlow(config_entries.ConfigSubentryFlow):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> SubentryFlowResult:
+    ) -> FlowResult:
         """User flow to create a conversation agent."""
         return await self.async_step_init(user_input)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> SubentryFlowResult:
+    ) -> FlowResult:
         """Manage conversation agent configuration."""
         entry = self._get_entry()
         if entry.state is not config_entries.ConfigEntryState.LOADED:
@@ -557,13 +557,13 @@ class AITaskSubentryFlow(config_entries.ConfigSubentryFlow):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> SubentryFlowResult:
+    ) -> FlowResult:
         """User flow to create an AI task."""
         return await self.async_step_init(user_input)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> SubentryFlowResult:
+    ) -> FlowResult:
         """Manage AI task configuration."""
         entry = self._get_entry()
         if entry.state is not config_entries.ConfigEntryState.LOADED:
