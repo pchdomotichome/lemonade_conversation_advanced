@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Literal, override
+from typing import Any, Literal, override
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import CONF_LLM_HASS_API, CONF_PROMPT, MATCH_ALL
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import DOMAIN
@@ -91,7 +92,7 @@ class LemonadeConversationEntity(
         self,
         chat_log: conversation.ChatLog,
     ) -> None:
-        """Generate an answer for the chat log."""
+        """Generate an answer for the chat log with tool calling loop."""
         import json
         import aiohttp
         from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -103,108 +104,128 @@ class LemonadeConversationEntity(
         temperature = options.get("temperature", 0.7)
         max_tokens = options.get("max_tokens", 2048)
 
-        # Build messages from chat log
-        messages = []
-        for content in chat_log.content:
-            if isinstance(content, conversation.SystemContent):
-                messages.append({"role": "system", "content": content.content})
-            elif isinstance(content, conversation.UserContent):
-                messages.append({"role": "user", "content": content.content})
-            elif isinstance(content, conversation.AssistantContent):
-                msg: dict[str, Any] = {"role": "assistant", "content": content.content or ""}
-                if content.tool_calls:
-                    msg["tool_calls"] = [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {
-                                "name": tc.tool_name,
-                                "arguments": json.dumps(tc.tool_args),
-                            },
-                        }
-                        for tc in content.tool_calls
-                    ]
-                messages.append(msg)
-            elif isinstance(content, conversation.ToolResultContent):
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": content.tool_call_id,
-                    "content": json.dumps(content.tool_result),
-                })
+        # Tool calling loop - max iterations to prevent infinite loops
+        max_iterations = 5
+        iteration = 0
 
-        # Get tools from chat log
-        tools = None
-        if chat_log.llm_api:
-            tools = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": tool.description,
-                        "parameters": tool.parameters.schema if tool.parameters else {},
-                    },
-                }
-                for tool in chat_log.llm_api.tools
-            ]
+        while iteration < max_iterations:
+            iteration += 1
 
-        # Call Lemonade Server
-        session = async_get_clientsession(self.hass)
-        headers = {"Content-Type": "application/json"}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
+            # Build messages from chat log
+            messages = []
+            for content in chat_log.content:
+                if isinstance(content, conversation.SystemContent):
+                    messages.append({"role": "system", "content": content.content})
+                elif isinstance(content, conversation.UserContent):
+                    messages.append({"role": "user", "content": content.content})
+                elif isinstance(content, conversation.AssistantContent):
+                    msg: dict[str, Any] = {"role": "assistant", "content": content.content or ""}
+                    if content.tool_calls:
+                        msg["tool_calls"] = [
+                            {
+                                "id": tc.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tc.tool_name,
+                                    "arguments": json.dumps(tc.tool_args),
+                                },
+                            }
+                            for tc in content.tool_calls
+                        ]
+                    messages.append(msg)
+                elif isinstance(content, conversation.ToolResultContent):
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": content.tool_call_id,
+                        "content": json.dumps(content.tool_result),
+                    })
 
-        payload: dict[str, Any] = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "stream": False,
-        }
-        if tools:
-            payload["tools"] = tools
-            payload["tool_choice"] = "auto"
+            # Get tools from chat log
+            tools = None
+            if chat_log.llm_api:
+                tools = [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": tool.name,
+                            "description": tool.description,
+                            "parameters": tool.parameters.schema if tool.parameters else {},
+                        },
+                    }
+                    for tool in chat_log.llm_api.tools
+                ]
 
-        try:
-            async with session.post(
-                f"{server_url}/v1/chat/completions",
-                json=payload,
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=60),
-            ) as resp:
-                if resp.status >= 400:
-                    text = await resp.text()
-                    raise conversation.ConverseError(
-                        f"LLM error: {text}",
-                        conversation_id=chat_log.conversation_id,
-                        response=conversation.IntentResponse(language=user_input.language),
-                    )
+            # Call Lemonade Server
+            session = async_get_clientsession(self.hass)
+            headers = {"Content-Type": "application/json"}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
 
-                data = await resp.json()
-                message = data["choices"][0]["message"]
+            payload: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "stream": False,
+            }
+            if tools:
+                payload["tools"] = tools
+                payload["tool_choice"] = "auto"
+
+            try:
+                async with session.post(
+                    f"{server_url}/v1/chat/completions",
+                    json=payload,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=60),
+                ) as resp:
+                    if resp.status >= 400:
+                        text = await resp.text()
+                        raise HomeAssistantError(f"LLM error: {text}")
+
+                    data = await resp.json()
+                    message = data["choices"][0]["message"]
 
                 # Add assistant response to chat log
-                tool_calls = None
                 if message.get("tool_calls"):
-                    tool_calls = [
-                        conversation.ToolResultContent(
-                            agent_id=self.entity_id,
-                            tool_call_id=tc["id"],
-                            tool_name=tc["function"]["name"],
-                            tool_result=json.loads(tc["function"]["arguments"]),
+                    # LLM wants to call tools - add AssistantContent with tool_calls
+                    tool_calls_list = [
+                        conversation.ToolCall(
+                            id=tc["id"],
+                            name=tc["function"]["name"],
+                            arguments=json.loads(tc["function"]["arguments"]),
                         )
                         for tc in message["tool_calls"]
                     ]
+                    chat_log.async_add_assistant_content(
+                        conversation.AssistantContent(
+                            agent_id=self.entity_id,
+                            content=message.get("content", ""),
+                            tool_calls=tool_calls_list,
+                        )
+                    )
+                    # Execute the tools via ChatLog
+                    for tc in message["tool_calls"]:
+                        await chat_log.async_call_tool(
+                            tool_name=tc["function"]["name"],
+                            tool_args=json.loads(tc["function"]["arguments"]),
+                            tool_call_id=tc["id"],
+                            agent_id=self.entity_id,
+                        )
+                    # Continue loop to let LLM respond to tool results
+                    continue
 
+                # No tool calls - add final response and break
                 chat_log.async_add_assistant_content_without_tools(
                     conversation.AssistantContent(
                         agent_id=self.entity_id,
                         content=message.get("content", ""),
                     )
                 )
+                break
 
-        except aiohttp.ClientError as err:
-            raise conversation.ConverseError(
-                f"Connection error: {err}",
-                conversation_id=chat_log.conversation_id,
-                response=conversation.IntentResponse(language=user_input.language),
-            ) from err
+            except aiohttp.ClientError as err:
+                raise HomeAssistantError(f"Connection error: {err}") from err
+        else:
+            # Max iterations reached
+            raise HomeAssistantError("Max tool calling iterations reached")
