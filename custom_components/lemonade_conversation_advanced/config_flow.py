@@ -10,7 +10,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.data_entry_flow import FlowResult, SubentryFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     NumberSelector,
@@ -69,6 +69,17 @@ class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._server_url: str = ""
         self._api_key: str | None = None
         self._model_options: list[str] = []
+
+    @classmethod
+    @callback
+    def async_get_supported_subentry_types(
+        cls, config_entry: config_entries.ConfigEntry
+    ) -> dict[str, type[config_entries.ConfigSubentryFlow]]:
+        """Return subentries supported by this handler."""
+        return {
+            "conversation": ConversationSubentryFlow,
+            "ai_task": AITaskSubentryFlow,
+        }
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -452,3 +463,177 @@ class LemonadeOptionsFlow(config_entries.OptionsFlow):
                 }
             ),
         )
+
+
+class ConversationSubentryFlow(config_entries.ConfigSubentryFlow):
+    """Handle conversation subentry flow."""
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """User flow to create a conversation agent."""
+        return await self.async_step_init(user_input)
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Manage conversation agent configuration."""
+        entry = self._get_entry()
+        if entry.state is not config_entries.ConfigEntryState.LOADED:
+            return self.async_abort(reason="entry_not_loaded")
+
+        if user_input is not None:
+            return self.async_create_entry(
+                title=user_input.get(CONF_MODEL_NAME, "Lemonade Assistant"),
+                data=user_input,
+            )
+
+        # Fetch models
+        models = await self._fetch_models(entry)
+        model_options = models or ["No models found"]
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_MODEL_NAME): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value=m, label=m)
+                                for m in model_options
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                            sort=True,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_SYSTEM_PROMPT, default=DEFAULT_SYSTEM_PROMPT
+                    ): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+                    ),
+                    vol.Optional(
+                        CONF_TEMPERATURE, default=DEFAULT_TEMPERATURE
+                    ): NumberSelector(
+                        NumberSelectorConfig(min=0.0, max=2.0, step=0.05, mode=NumberSelectorMode.SLIDER)
+                    ),
+                    vol.Optional(
+                        CONF_MAX_TOKENS, default=DEFAULT_MAX_TOKENS
+                    ): NumberSelector(
+                        NumberSelectorConfig(min=256, max=32768, step=256, mode=NumberSelectorMode.BOX)
+                    ),
+                }
+            ),
+        )
+
+    async def _fetch_models(self, entry: config_entries.ConfigEntry) -> list[str]:
+        """Fetch models from Lemonade Server."""
+        import aiohttp
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+        server_url = entry.data.get(CONF_SERVER_URL, "")
+        api_key = entry.data.get(CONF_API_KEY, "")
+
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        session = async_get_clientsession(self.hass)
+        try:
+            async with session.get(
+                f"{server_url}/v1/models",
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status >= 400:
+                    return []
+                data = await resp.json()
+                return [m.get("id", "") for m in data.get("data", [])]
+        except Exception:
+            return []
+
+
+class AITaskSubentryFlow(config_entries.ConfigSubentryFlow):
+    """Handle AI task subentry flow."""
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """User flow to create an AI task."""
+        return await self.async_step_init(user_input)
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Manage AI task configuration."""
+        entry = self._get_entry()
+        if entry.state is not config_entries.ConfigEntryState.LOADED:
+            return self.async_abort(reason="entry_not_loaded")
+
+        if user_input is not None:
+            return self.async_create_entry(
+                title=user_input.get(CONF_MODEL_NAME, "Lemonade AI Task"),
+                data=user_input,
+            )
+
+        # Fetch models
+        models = await self._fetch_models(entry)
+        model_options = models or ["No models found"]
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_MODEL_NAME): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value=m, label=m)
+                                for m in model_options
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                            sort=True,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_SYSTEM_PROMPT, default="You are a helpful assistant."
+                    ): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+                    ),
+                    vol.Optional(
+                        CONF_TEMPERATURE, default=DEFAULT_TEMPERATURE
+                    ): NumberSelector(
+                        NumberSelectorConfig(min=0.0, max=2.0, step=0.05, mode=NumberSelectorMode.SLIDER)
+                    ),
+                    vol.Optional(
+                        CONF_MAX_TOKENS, default=DEFAULT_MAX_TOKENS
+                    ): NumberSelector(
+                        NumberSelectorConfig(min=256, max=32768, step=256, mode=NumberSelectorMode.BOX)
+                    ),
+                }
+            ),
+        )
+
+    async def _fetch_models(self, entry: config_entries.ConfigEntry) -> list[str]:
+        """Fetch models from Lemonade Server."""
+        import aiohttp
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+        server_url = entry.data.get(CONF_SERVER_URL, "")
+        api_key = entry.data.get(CONF_API_KEY, "")
+
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        session = async_get_clientsession(self.hass)
+        try:
+            async with session.get(
+                f"{server_url}/v1/models",
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status >= 400:
+                    return []
+                data = await resp.json()
+                return [m.get("id", "") for m in data.get("data", [])]
+        except Exception:
+            return []

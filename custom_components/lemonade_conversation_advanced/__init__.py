@@ -12,7 +12,7 @@ from .index_manager import IndexManager
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.CONVERSATION]
+PLATFORMS = [Platform.CONVERSATION, Platform.AI_TASK]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
