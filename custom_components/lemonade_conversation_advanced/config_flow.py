@@ -33,30 +33,27 @@ from .const import (
     CONF_SYSTEM_PROMPT,
     CONF_TEMPERATURE,
     CONF_MAX_TOKENS,
-    CONF_MAX_HISTORY,
-    CONF_MAX_ITERATIONS,
-    CONF_LEMONADE_PORT,
-    CONF_CONTROL_HA,
-    CONF_FOLLOW_UP_MODE,
-    CONF_RESPONSE_MODE,
-    CONF_DEBUG_MODE,
-    CONF_TIMEOUT,
     DEFAULT_SERVER_URL,
     DEFAULT_MODEL_NAME,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEMPERATURE,
     DEFAULT_MAX_TOKENS,
-    DEFAULT_MAX_HISTORY,
-    DEFAULT_MAX_ITERATIONS,
-    DEFAULT_LEMONADE_PORT,
-    DEFAULT_CONTROL_HA,
-    DEFAULT_FOLLOW_UP_MODE,
-    DEFAULT_RESPONSE_MODE,
-    DEFAULT_DEBUG_MODE,
-    DEFAULT_TIMEOUT,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Default subentry data
+DEFAULT_CONVERSATION_DATA = {
+    CONF_SYSTEM_PROMPT: "You are a helpful Home Assistant voice assistant.",
+    CONF_TEMPERATURE: 0.7,
+    CONF_MAX_TOKENS: 2048,
+}
+
+DEFAULT_AI_TASK_DATA = {
+    CONF_SYSTEM_PROMPT: "You are a helpful assistant.",
+    CONF_TEMPERATURE: 0.7,
+    CONF_MAX_TOKENS: 2048,
+}
 
 
 class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -77,8 +74,8 @@ class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> dict[str, type[config_entries.ConfigSubentryFlow]]:
         """Return subentries supported by this handler."""
         return {
-            "conversation": ConversationSubentryFlow,
-            "ai_task": AITaskSubentryFlow,
+            "conversation": LemonadeSubentryFlowHandler,
+            "ai_task": LemonadeSubentryFlowHandler,
         }
 
     async def async_step_user(
@@ -130,34 +127,42 @@ class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_model(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle model selection and basic config."""
+        """Handle model selection and create entry with subentries."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            model_name = user_input[CONF_MODEL_NAME]
+
             # Store server config in data
             data = {
                 CONF_SERVER_URL: self._server_url,
                 CONF_API_KEY: self._api_key or "",
             }
 
-            # Store model config in options
-            options = {
-                CONF_MODEL_NAME: user_input[CONF_MODEL_NAME],
-                CONF_SYSTEM_PROMPT: user_input.get(
-                    CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
-                ),
-                CONF_TEMPERATURE: user_input.get(
-                    CONF_TEMPERATURE, DEFAULT_TEMPERATURE
-                ),
-                CONF_MAX_TOKENS: user_input.get(
-                    CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS
-                ),
-            }
-
+            # Create entry with subentries
             return self.async_create_entry(
-                title=f"Lemonade ({user_input[CONF_MODEL_NAME]})",
+                title="Lemonade Conversation Advanced",
                 data=data,
-                options=options,
+                subentries=[
+                    {
+                        "subentry_type": "conversation",
+                        "data": {
+                            CONF_MODEL_NAME: model_name,
+                            **DEFAULT_CONVERSATION_DATA,
+                        },
+                        "title": f"Lemonade Assistant ({model_name})",
+                        "unique_id": None,
+                    },
+                    {
+                        "subentry_type": "ai_task",
+                        "data": {
+                            CONF_MODEL_NAME: model_name,
+                            **DEFAULT_AI_TASK_DATA,
+                        },
+                        "title": f"Lemonade AI Task ({model_name})",
+                        "unique_id": None,
+                    },
+                ],
             )
 
         # Fetch available models
@@ -184,97 +189,9 @@ class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             sort=True,
                         )
                     ),
-                    vol.Optional(
-                        CONF_SYSTEM_PROMPT, default=DEFAULT_SYSTEM_PROMPT
-                    ): TextSelector(
-                        TextSelectorConfig(
-                            type=TextSelectorType.TEXT, multiline=True
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_TEMPERATURE, default=DEFAULT_TEMPERATURE
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=0.0, max=2.0, step=0.05,
-                            mode=NumberSelectorMode.SLIDER,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_MAX_TOKENS, default=DEFAULT_MAX_TOKENS
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=256, max=32768, step=256,
-                            mode=NumberSelectorMode.BOX,
-                        )
-                    ),
                 }
             ),
             errors=errors,
-        )
-
-    async def async_step_advanced(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle advanced settings (optional)."""
-        if user_input is not None:
-            # Update options with advanced settings
-            return self.async_create_entry(
-                title="Lemonade Conversation Advanced",
-                data={
-                    CONF_SERVER_URL: self._server_url,
-                    CONF_API_KEY: self._api_key or "",
-                },
-                options=user_input,
-            )
-
-        return self.async_show_form(
-            step_id="advanced",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_MAX_HISTORY, default=DEFAULT_MAX_HISTORY
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=1, max=50, step=1,
-                            mode=NumberSelectorMode.BOX,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_MAX_ITERATIONS, default=DEFAULT_MAX_ITERATIONS
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=1, max=20, step=1,
-                            mode=NumberSelectorMode.BOX,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_CONTROL_HA, default=DEFAULT_CONTROL_HA
-                    ): bool,
-                    vol.Optional(
-                        CONF_FOLLOW_UP_MODE, default=DEFAULT_FOLLOW_UP_MODE
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value="none", label="None"),
-                                SelectOptionDict(value="smart", label="Smart"),
-                                SelectOptionDict(value="always", label="Always"),
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_DEBUG_MODE, default=DEFAULT_DEBUG_MODE
-                    ): bool,
-                    vol.Optional(
-                        CONF_TIMEOUT, default=DEFAULT_TIMEOUT
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=5, max=120, step=5,
-                            mode=NumberSelectorMode.BOX,
-                        )
-                    ),
-                }
-            ),
         )
 
     async def _test_connection(
@@ -287,17 +204,12 @@ class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not server_url.startswith(("http://", "https://")):
             server_url = f"http://{server_url}"
 
-        # Ensure URL ends with proper port format
-        if server_url.endswith(":"):
-            server_url = server_url.rstrip(":")
-
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
         session = async_get_clientsession(self.hass)
         url = f"{server_url}/v1/health"
-        _LOGGER.debug("Testing connection to: %s", url)
 
         try:
             async with session.get(
@@ -305,237 +217,26 @@ class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 headers=headers,
                 timeout=aiohttp.ClientTimeout(total=15),
             ) as resp:
-                _LOGGER.debug("Response status: %s", resp.status)
                 if resp.status >= 400:
                     text = await resp.text()
                     raise Exception(f"HTTP {resp.status}: {text}")
-                data = await resp.json()
-                _LOGGER.debug("Lemonade Server health: %s", data)
+                await resp.json()
         except asyncio.TimeoutError:
-            error_msg = f"Timeout connecting to {url}. Check if the server is running and accessible."
-            _LOGGER.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(f"Timeout connecting to {url}")
         except aiohttp.ClientError as err:
-            error_msg = f"Cannot connect to {url}: {err}"
-            _LOGGER.error(error_msg)
-            raise Exception(error_msg) from err
-        except Exception as err:
-            if "TimeoutError" in str(type(err).__name__):
-                error_msg = f"Timeout connecting to {url}. Check if the server is running and accessible."
-                _LOGGER.error(error_msg)
-                raise Exception(error_msg)
-            error_msg = f"Connection test failed: {type(err).__name__}: {err}"
-            _LOGGER.error(error_msg)
-            raise Exception(error_msg) from err
+            raise Exception(f"Cannot connect to {url}: {err}") from err
 
     async def _fetch_models(self) -> list[dict[str, Any]]:
         """Fetch available models from Lemonade Server."""
         import aiohttp
 
+        server_url = self._server_url
+        if not server_url.startswith(("http://", "https://")):
+            server_url = f"http://{server_url}"
+
         headers = {"Content-Type": "application/json"}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
-
-        session = async_get_clientsession(self.hass)
-        try:
-            async with session.get(
-                f"{self._server_url}/v1/models",
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                if resp.status >= 400:
-                    _LOGGER.warning("Failed to fetch models: HTTP %s", resp.status)
-                    return []
-                data = await resp.json()
-                return data.get("data", [])
-        except aiohttp.ClientError as err:
-            _LOGGER.error("Error fetching models: %s", err)
-            return []
-
-    @staticmethod
-    @callback
-    def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
-    ) -> LemonadeOptionsFlow:
-        """Get the options flow for this handler."""
-        return LemonadeOptionsFlow(config_entry)
-
-
-class LemonadeOptionsFlow(config_entries.OptionsFlow):
-    """Handle options flow for Lemonade Conversation Advanced."""
-
-    def __init__(self, entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.entry = entry
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Manage options."""
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-
-        options = self.entry.options
-
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_MODEL_NAME,
-                        default=options.get(CONF_MODEL_NAME, DEFAULT_MODEL_NAME),
-                    ): str,
-                    vol.Optional(
-                        CONF_SYSTEM_PROMPT,
-                        default=options.get(
-                            CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
-                        ),
-                    ): TextSelector(
-                        TextSelectorConfig(
-                            type=TextSelectorType.TEXT, multiline=True
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_TEMPERATURE,
-                        default=options.get(
-                            CONF_TEMPERATURE, DEFAULT_TEMPERATURE
-                        ),
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=0.0, max=2.0, step=0.05,
-                            mode=NumberSelectorMode.SLIDER,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_MAX_TOKENS,
-                        default=options.get(
-                            CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS
-                        ),
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=256, max=32768, step=256,
-                            mode=NumberSelectorMode.BOX,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_MAX_HISTORY,
-                        default=options.get(
-                            CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY
-                        ),
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=1, max=50, step=1,
-                            mode=NumberSelectorMode.BOX,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_MAX_ITERATIONS,
-                        default=options.get(
-                            CONF_MAX_ITERATIONS, DEFAULT_MAX_ITERATIONS
-                        ),
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=1, max=20, step=1,
-                            mode=NumberSelectorMode.BOX,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_CONTROL_HA,
-                        default=options.get(
-                            CONF_CONTROL_HA, DEFAULT_CONTROL_HA
-                        ),
-                    ): bool,
-                    vol.Optional(
-                        CONF_DEBUG_MODE,
-                        default=options.get(
-                            CONF_DEBUG_MODE, DEFAULT_DEBUG_MODE
-                        ),
-                    ): bool,
-                    vol.Optional(
-                        CONF_TIMEOUT,
-                        default=options.get(CONF_TIMEOUT, DEFAULT_TIMEOUT),
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=5, max=120, step=5,
-                            mode=NumberSelectorMode.BOX,
-                        )
-                    ),
-                }
-            ),
-        )
-
-
-class ConversationSubentryFlow(config_entries.ConfigSubentryFlow):
-    """Handle conversation subentry flow."""
-
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """User flow to create a conversation agent."""
-        return await self.async_step_init(user_input)
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Manage conversation agent configuration."""
-        entry = self._get_entry()
-        if entry.state is not config_entries.ConfigEntryState.LOADED:
-            return self.async_abort(reason="entry_not_loaded")
-
-        if user_input is not None:
-            return self.async_create_entry(
-                title=user_input.get(CONF_MODEL_NAME, "Lemonade Assistant"),
-                data=user_input,
-            )
-
-        # Fetch models
-        models = await self._fetch_models(entry)
-        model_options = models or ["No models found"]
-
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_MODEL_NAME): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value=m, label=m)
-                                for m in model_options
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                            sort=True,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_SYSTEM_PROMPT, default=DEFAULT_SYSTEM_PROMPT
-                    ): TextSelector(
-                        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
-                    ),
-                    vol.Optional(
-                        CONF_TEMPERATURE, default=DEFAULT_TEMPERATURE
-                    ): NumberSelector(
-                        NumberSelectorConfig(min=0.0, max=2.0, step=0.05, mode=NumberSelectorMode.SLIDER)
-                    ),
-                    vol.Optional(
-                        CONF_MAX_TOKENS, default=DEFAULT_MAX_TOKENS
-                    ): NumberSelector(
-                        NumberSelectorConfig(min=256, max=32768, step=256, mode=NumberSelectorMode.BOX)
-                    ),
-                }
-            ),
-        )
-
-    async def _fetch_models(self, entry: config_entries.ConfigEntry) -> list[str]:
-        """Fetch models from Lemonade Server."""
-        import aiohttp
-        from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
-        server_url = entry.data.get(CONF_SERVER_URL, "")
-        api_key = entry.data.get(CONF_API_KEY, "")
-
-        headers = {"Content-Type": "application/json"}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
 
         session = async_get_clientsession(self.hass)
         try:
@@ -547,43 +248,72 @@ class ConversationSubentryFlow(config_entries.ConfigSubentryFlow):
                 if resp.status >= 400:
                     return []
                 data = await resp.json()
-                return [m.get("id", "") for m in data.get("data", [])]
+                return data.get("data", [])
         except Exception:
             return []
 
 
-class AITaskSubentryFlow(config_entries.ConfigSubentryFlow):
-    """Handle AI task subentry flow."""
+class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
+    """Handle subentry flow for Lemonade."""
+
+    @property
+    def _is_new(self) -> bool:
+        """Return if this is a new subentry."""
+        return self.source == "user"
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """User flow to create an AI task."""
-        return await self.async_step_init(user_input)
+        """User flow to create a subentry."""
+        return await self.async_step_set_options(user_input)
 
-    async def async_step_init(
+    async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage AI task configuration."""
+        """Handle reconfiguration."""
+        return await self.async_step_set_options(user_input)
+
+    async def async_step_set_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Set subentry options."""
         entry = self._get_entry()
         if entry.state is not config_entries.ConfigEntryState.LOADED:
             return self.async_abort(reason="entry_not_loaded")
 
         if user_input is not None:
-            return self.async_create_entry(
-                title=user_input.get(CONF_MODEL_NAME, "Lemonade AI Task"),
+            title = user_input.get(CONF_MODEL_NAME, "Lemonade")
+            if self._is_new:
+                return self.async_create_entry(
+                    title=f"Lemonade ({title})",
+                    data=user_input,
+                )
+            return self.async_update_and_abort(
+                entry,
+                self._get_reconfigure_subentry(),
                 data=user_input,
             )
+
+        # Get current options
+        if self._is_new:
+            options = DEFAULT_CONVERSATION_DATA.copy()
+            if self._subentry_type == "ai_task":
+                options = DEFAULT_AI_TASK_DATA.copy()
+        else:
+            options = self._get_reconfigure_subentry().data.copy()
 
         # Fetch models
         models = await self._fetch_models(entry)
         model_options = models or ["No models found"]
 
         return self.async_show_form(
-            step_id="init",
+            step_id="set_options",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_MODEL_NAME): SelectSelector(
+                    vol.Required(
+                        CONF_MODEL_NAME,
+                        default=options.get(CONF_MODEL_NAME),
+                    ): SelectSelector(
                         SelectSelectorConfig(
                             options=[
                                 SelectOptionDict(value=m, label=m)
@@ -594,17 +324,20 @@ class AITaskSubentryFlow(config_entries.ConfigSubentryFlow):
                         )
                     ),
                     vol.Optional(
-                        CONF_SYSTEM_PROMPT, default="You are a helpful assistant."
+                        CONF_SYSTEM_PROMPT,
+                        default=options.get(CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT),
                     ): TextSelector(
                         TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
                     ),
                     vol.Optional(
-                        CONF_TEMPERATURE, default=DEFAULT_TEMPERATURE
+                        CONF_TEMPERATURE,
+                        default=options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE),
                     ): NumberSelector(
                         NumberSelectorConfig(min=0.0, max=2.0, step=0.05, mode=NumberSelectorMode.SLIDER)
                     ),
                     vol.Optional(
-                        CONF_MAX_TOKENS, default=DEFAULT_MAX_TOKENS
+                        CONF_MAX_TOKENS,
+                        default=options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS),
                     ): NumberSelector(
                         NumberSelectorConfig(min=256, max=32768, step=256, mode=NumberSelectorMode.BOX)
                     ),
@@ -619,6 +352,9 @@ class AITaskSubentryFlow(config_entries.ConfigSubentryFlow):
 
         server_url = entry.data.get(CONF_SERVER_URL, "")
         api_key = entry.data.get(CONF_API_KEY, "")
+
+        if not server_url.startswith(("http://", "https://")):
+            server_url = f"http://{server_url}"
 
         headers = {"Content-Type": "application/json"}
         if api_key:

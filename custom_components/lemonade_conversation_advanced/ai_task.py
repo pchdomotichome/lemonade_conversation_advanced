@@ -7,22 +7,13 @@ import logging
 from typing import Any
 
 from homeassistant.components import ai_task, conversation
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_MODEL
+from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import llm
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import (
-    DOMAIN,
-    CONF_SERVER_URL,
-    CONF_API_KEY,
-    CONF_MODEL_NAME,
-    CONF_SYSTEM_PROMPT,
-    CONF_TEMPERATURE,
-    CONF_MAX_TOKENS,
-)
+from .const import DOMAIN
+from .entity import LemonadeBaseEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,33 +24,28 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up AI Task entities."""
-    for subentry_id, subentry in config_entry.subentries.items():
+    for subentry in config_entry.subentries.values():
         if subentry.subentry_type != "ai_task":
             continue
 
         async_add_entities(
             [LemonadeAITaskEntity(config_entry, subentry)],
-            config_subentry_id=subentry_id,
+            config_subentry_id=subentry.subentry_id,
         )
 
 
-class LemonadeAITaskEntity(ai_task.AITaskEntity):
+class LemonadeAITaskEntity(
+    ai_task.AITaskEntity,
+    LemonadeBaseEntity,
+):
     """Lemonade AI Task entity."""
 
-    _attr_has_entity_name = True
-    _attr_name = None
-    _attr_supported_features = ai_task.AITaskEntityFeature.GENERATE_DATA
-
-    def __init__(
-        self,
-        entry: ConfigEntry,
-        subentry: Any,
-    ) -> None:
+    def __init__(self, entry: ConfigEntry, subentry: ConfigSubentry) -> None:
         """Initialize the entity."""
-        self.entry = entry
-        self.subentry = subentry
-        self._attr_unique_id = subentry.subentry_id
+        super().__init__(entry, subentry)
+        self._attr_supported_features = ai_task.AITaskEntityFeature.GENERATE_DATA
 
+    @override
     async def _async_generate_data(
         self,
         task: ai_task.GenDataTask,
@@ -70,12 +56,12 @@ class LemonadeAITaskEntity(ai_task.AITaskEntity):
         from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
         options = self.subentry.data
-        server_url = self.entry.data.get(CONF_SERVER_URL, "")
-        api_key = self.entry.data.get(CONF_API_KEY, "")
-        model = options.get(CONF_MODEL_NAME, "")
-        system_prompt = options.get(CONF_SYSTEM_PROMPT, "You are a helpful assistant.")
-        temperature = options.get(CONF_TEMPERATURE, 0.7)
-        max_tokens = options.get(CONF_MAX_TOKENS, 2048)
+        server_url = self.entry.data.get("server_url", "")
+        api_key = self.entry.data.get("api_key", "")
+        model = options.get("model_name", "")
+        system_prompt = options.get("system_prompt", "You are a helpful assistant.")
+        temperature = options.get("temperature", 0.7)
+        max_tokens = options.get("max_tokens", 2048)
 
         # Build messages
         messages = [
