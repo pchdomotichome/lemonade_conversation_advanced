@@ -1,12 +1,13 @@
 {
   "domain": "lemonade_conversation_advanced",
   "name": "Lemonade Conversation Advanced",
-  "version": "0.1.0-beta.4",
+  "version": "0.1.0-beta.9",
   "config_flow": true,
   "documentation": "https://github.com/pchdomotichome/lemonade_conversation_advanced",
   "issue_tracker": "https://github.com/pchdomotichome/lemonade_conversation_advanced/issues",
   "requirements": [
-    "openai>=1.0.0"
+    "openai>=1.0.0",
+    "voluptuous_openapi>=0.1.0"
   ],
   "dependencies": [
     "conversation"
