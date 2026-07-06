@@ -403,7 +403,8 @@ class LemonadeConversationEntity(
         rag_top_k = options.get("rag_top_k", 12)
         if enable_rag and server_url:
             cache_dir = f"{self.hass.config.config_dir}/lemonade_rag_cache"
-            rag_index = RAGIndex(cache_dir)
+            api_key = self.entry.data.get("api_key", "")
+            rag_index = RAGIndex(cache_dir, api_key)
             await rag_index.load()
             if not rag_index._entries:
                 try:

@@ -33,10 +33,11 @@ RAG_CACHE_DIR_NAME = "lemonade_rag_cache"
 class RAGIndex:
     """Simple embedding index for Home Assistant entities."""
 
-    def __init__(self, cache_dir: str) -> None:
+    def __init__(self, cache_dir: str, api_key: str = "") -> None:
         self._cache_dir = Path(cache_dir)
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._entries: list[dict[str, Any]] = []
+        self._api_key = api_key
 
     async def load(self) -> None:
         cache_file = self._cache_dir / "index.json"
@@ -56,10 +57,13 @@ class RAGIndex:
         url = f"{server_url.rstrip('/')}/v1/embeddings"
         _LOGGER.debug("Requesting embedding from %s for text: %s...", url, text[:50])
         try:
+            headers = {"Content-Type": "application/json"}
+            if self._api_key:
+                headers["Authorization"] = f"Bearer {self._api_key}"
             resp = await session.post(
                 url,
                 json={"model": EMBED_MODEL, "input": text},
-                headers={"Content-Type": "application/json"},
+                headers=headers,
                 timeout=aiohttp.ClientTimeout(total=30),
             )
             if resp.status != 200:
