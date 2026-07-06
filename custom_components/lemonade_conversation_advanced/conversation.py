@@ -2,17 +2,28 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import AsyncGenerator
 from typing import Any, Literal, override
+
+import aiohttp
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import CONF_LLM_HASS_API, CONF_PROMPT, MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import DOMAIN
 from .entity import LemonadeBaseEntity
+
+# Regex patterns for thinking/reasoning tags embedded in content
+_THINKING_PATTERNS = [
+    re.compile(r"<think>(.*?)</think>", re.DOTALL | re.IGNORECASE),
+    re.compile(r"<\|thought\|>(.*?)<\|/thought\|>", re.DOTALL | re.IGNORECASE),
+]
 
 
 async def async_setup_entry(
@@ -88,108 +99,319 @@ class LemonadeConversationEntity(
 
         return conversation.async_get_result_from_chat_log(user_input, chat_log)
 
+    # ------------------------------------------------------------------ #
+    #  Helpers – build messages / payload from ChatLog                     #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _build_messages(chat_log: conversation.ChatLog) -> list[dict[str, Any]]:
+        """Serialise ChatLog content into OpenAI-format messages."""
+        import json
+
+        messages: list[dict[str, Any]] = []
+        for content in chat_log.content:
+            if isinstance(content, conversation.SystemContent):
+                messages.append({"role": "system", "content": content.content})
+            elif isinstance(content, conversation.UserContent):
+                messages.append({"role": "user", "content": content.content})
+            elif isinstance(content, conversation.AssistantContent):
+                msg: dict[str, Any] = {
+                    "role": "assistant",
+                    "content": content.content or "",
+                }
+                if content.thinking_content:
+                    msg["thinking_content"] = content.thinking_content
+                if content.tool_calls:
+                    msg["tool_calls"] = [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.tool_name,
+                                "arguments": json.dumps(tc.tool_args),
+                            },
+                        }
+                        for tc in content.tool_calls
+                    ]
+                messages.append(msg)
+            elif isinstance(content, conversation.ToolResultContent):
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": content.tool_call_id,
+                    "content": json.dumps(content.tool_result),
+                })
+        return messages
+
+    def _build_payload(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        *,
+        stream: bool,
+    ) -> dict[str, Any]:
+        """Build the API request payload."""
+        options = self.subentry.data
+        payload: dict[str, Any] = {
+            "model": options.get("model_name", ""),
+            "messages": messages,
+            "temperature": options.get("temperature", 0.7),
+            "max_tokens": options.get("max_tokens", 2048),
+            "stream": stream,
+        }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+        return payload
+
+    def _get_headers(self) -> dict[str, str]:
+        """Return HTTP headers for the API call."""
+        api_key = self.entry.data.get("api_key", "")
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        return headers
+
+    def _get_tools(self, chat_log: conversation.ChatLog) -> list[dict[str, Any]] | None:
+        """Extract tool definitions from ChatLog."""
+        if not chat_log.llm_api:
+            return None
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters.schema if tool.parameters else {},
+                },
+            }
+            for tool in chat_log.llm_api.tools
+        ]
+
+    # ------------------------------------------------------------------ #
+    #  Thinking-tag extraction                                             #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _extract_thinking(text: str) -> tuple[str, str]:
+        """Strip <think> / <|thought|> tags, returning (clean_text, thinking)."""
+        thinking_parts: list[str] = []
+        cleaned = text
+        for pat in _THINKING_PATTERNS:
+            for match in pat.finditer(cleaned):
+                thinking_parts.append(match.group(1))
+            cleaned = pat.sub("", cleaned)
+        cleaned = re.sub(r"\n\s*\n", "\n\n", cleaned).strip()
+        return cleaned, "\n".join(thinking_parts)
+
+    # ------------------------------------------------------------------ #
+    #  SSE streaming parser                                                #
+    # ------------------------------------------------------------------ #
+
+    async def _parse_sse_stream(
+        self,
+        response: aiohttp.ClientResponse,
+        chat_log: conversation.ChatLog,
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """Parse an SSE stream into accumulated deltas.
+
+        Yields ``AssistantContentDeltaDict``-compatible dicts.  Content is
+        buffered to detect ``<think>`` tags that span multiple chunks.
+        """
+        import json as _json
+
+        content_buf = ""
+        thinking_buf = ""
+        tc_accum: dict[int, dict[str, Any]] = {}
+
+        async for raw_line in response.content:
+            if not raw_line:
+                continue
+            line = raw_line.decode("utf-8").strip()
+
+            # Ollama: complete JSON per line
+            if line.startswith("{"):
+                try:
+                    data = _json.loads(line)
+                except ValueError:
+                    continue
+                if data.get("done"):
+                    break
+                msg = data.get("message", {})
+                delta: dict[str, Any] = {}
+                if msg.get("content"):
+                    delta["content"] = msg["content"]
+                if msg.get("tool_calls"):
+                    delta["tool_calls"] = msg["tool_calls"]
+                if not delta:
+                    continue
+                line_data = delta  # use directly below
+
+            # OpenAI SSE format
+            elif line.startswith("data: "):
+                if line == "data: [DONE]":
+                    break
+                try:
+                    data = _json.loads(line[6:])
+                except ValueError:
+                    continue
+                choice = data.get("choices", [{}])[0]
+                line_data = choice.get("delta", {})
+                if not line_data:
+                    continue
+            else:
+                continue
+
+            # -- text content ------------------------------------------- #
+            raw_content = line_data.get("content") or ""
+            if raw_content:
+                content_buf += raw_content
+                # Extract complete thinking tags from buffer
+                cleaned, thinking = self._extract_thinking(content_buf)
+                if thinking:
+                    thinking_buf += thinking
+                    content_buf = cleaned
+                # Yield whatever clean content we have
+                if content_buf.strip():
+                    yield {"content": content_buf}
+                    content_buf = ""
+
+            # -- thinking_content field (Gemini-style) ------------------ #
+            tc_field = line_data.get("thinking_content") or ""
+            if tc_field:
+                thinking_buf += tc_field
+                yield {"thinking_content": tc_field}
+
+            # -- tool calls (accumulate by index) ------------------------ #
+            for tc_delta in line_data.get("tool_calls") or []:
+                idx = tc_delta.get("index", 0)
+                if idx not in tc_accum:
+                    tc_accum[idx] = {}
+                entry = tc_accum[idx]
+                if "id" in tc_delta:
+                    entry["id"] = tc_delta["id"]
+                func = tc_delta.get("function", {})
+                if "name" in func:
+                    entry["name"] = func["name"]
+                if "arguments" in func:
+                    entry["args_str"] = entry.get("args_str", "") + func["arguments"]
+
+        # Flush remaining buffered content
+        if content_buf.strip():
+            cleaned, thinking = self._extract_thinking(content_buf)
+            if thinking:
+                thinking_buf += thinking
+            yield {"content": cleaned}
+
+        # Flush accumulated tool calls
+        for idx in sorted(tc_accum):
+            tc = tc_accum[idx]
+            if "id" in tc and "name" in tc and "args_str" in tc:
+                try:
+                    args = _json.loads(tc["args_str"])
+                except (_json.JSONDecodeError, ValueError):
+                    args = {}
+                yield {
+                    "tool_calls": [
+                        {
+                            "id": tc["id"],
+                            "type": "function",
+                            "function": {"name": tc["name"], "arguments": args},
+                        }
+                    ]
+                }
+
+    # ------------------------------------------------------------------ #
+    #  Non-streaming fallback                                              #
+    # ------------------------------------------------------------------ #
+
+    async def _call_api_non_streaming(
+        self,
+        session: aiohttp.ClientSession,
+        payload: dict[str, Any],
+        headers: dict[str, str],
+    ) -> dict[str, Any]:
+        """Make a non-streaming API call and return the message dict."""
+        async with session.post(
+            f"{self.entry.data.get('server_url', '')}/v1/chat/completions",
+            json=payload,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=60),
+        ) as resp:
+            if resp.status >= 400:
+                text = await resp.text()
+                raise HomeAssistantError(f"LLM error: {text}")
+            data = await resp.json()
+            return data["choices"][0]["message"]
+
+    # ------------------------------------------------------------------ #
+    #  Main handler                                                        #
+    # ------------------------------------------------------------------ #
+
     async def _async_handle_chat_log(
         self,
         chat_log: conversation.ChatLog,
     ) -> None:
-        """Generate an answer for the chat log with tool calling loop."""
+        """Generate an answer for the chat log with streaming and tool-call loop."""
         import json
-        import aiohttp
-        from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-        options = self.subentry.data
+        session = async_get_clientsession(self.hass)
+        headers = self._get_headers()
         server_url = self.entry.data.get("server_url", "")
-        api_key = self.entry.data.get("api_key", "")
-        model = options.get("model_name", "")
-        temperature = options.get("temperature", 0.7)
-        max_tokens = options.get("max_tokens", 2048)
-
-        # Tool calling loop - max iterations to prevent infinite loops
+        api_url = f"{server_url}/v1/chat/completions"
+        tools = self._get_tools(chat_log)
         max_iterations = 5
-        iteration = 0
 
-        while iteration < max_iterations:
-            iteration += 1
+        for iteration in range(max_iterations):
+            messages = self._build_messages(chat_log)
+            payload = self._build_payload(messages, tools, stream=True)
 
-            # Build messages from chat log
-            messages = []
-            for content in chat_log.content:
-                if isinstance(content, conversation.SystemContent):
-                    messages.append({"role": "system", "content": content.content})
-                elif isinstance(content, conversation.UserContent):
-                    messages.append({"role": "user", "content": content.content})
-                elif isinstance(content, conversation.AssistantContent):
-                    msg: dict[str, Any] = {"role": "assistant", "content": content.content or ""}
-                    if content.tool_calls:
-                        msg["tool_calls"] = [
-                            {
-                                "id": tc.id,
-                                "type": "function",
-                                "function": {
-                                    "name": tc.tool_name,
-                                    "arguments": json.dumps(tc.tool_args),
-                                },
-                            }
-                            for tc in content.tool_calls
-                        ]
-                    messages.append(msg)
-                elif isinstance(content, conversation.ToolResultContent):
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": content.tool_call_id,
-                        "content": json.dumps(content.tool_result),
-                    })
-
-            # Get tools from chat log
-            tools = None
-            if chat_log.llm_api:
-                tools = [
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": tool.name,
-                            "description": tool.description,
-                            "parameters": tool.parameters.schema if tool.parameters else {},
-                        },
-                    }
-                    for tool in chat_log.llm_api.tools
-                ]
-
-            # Call Lemonade Server
-            session = async_get_clientsession(self.hass)
-            headers = {"Content-Type": "application/json"}
-            if api_key:
-                headers["Authorization"] = f"Bearer {api_key}"
-
-            payload: dict[str, Any] = {
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-                "stream": False,
-            }
-            if tools:
-                payload["tools"] = tools
-                payload["tool_choice"] = "auto"
-
+            # --- try streaming first, fallback to non-streaming --------- #
             try:
                 async with session.post(
-                    f"{server_url}/v1/chat/completions",
+                    api_url,
                     json=payload,
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=60),
+                    timeout=aiohttp.ClientTimeout(total=120),
                 ) as resp:
                     if resp.status >= 400:
-                        text = await resp.text()
-                        raise HomeAssistantError(f"LLM error: {text}")
+                        err_text = await resp.text()
+                        raise HomeAssistantError(f"LLM error: {err_text}")
 
-                    data = await resp.json()
-                    message = data["choices"][0]["message"]
+                    # Feed the SSE stream into HA's delta handler
+                    has_tool_result = False
+                    async for content in chat_log.async_add_delta_content_stream(
+                        self.entity_id,
+                        self._parse_sse_stream(resp, chat_log),
+                    ):
+                        if isinstance(content, conversation.ToolResultContent):
+                            has_tool_result = True
 
-                # Add assistant response to chat log
+                    if has_tool_result:
+                        continue  # tool results added – next iteration
+
+                    # No tool calls – final text response already streamed
+                    break
+
+            except aiohttp.ClientError as err:
+                # Timeout or network error – retry once with non-streaming
+                try:
+                    payload["stream"] = False
+                    message = await self._call_api_non_streaming(session, payload, headers)
+                except (aiohttp.ClientError, HomeAssistantError) as retry_err:
+                    raise HomeAssistantError(
+                        f"Connection error: {err} (retry failed: {retry_err})"
+                    ) from retry_err
+
+                # Process the non-streaming message
+                thinking_content = None
+                content_text = message.get("content", "")
+                if content_text:
+                    cleaned, thinking = self._extract_thinking(content_text)
+                    content_text = cleaned
+                    thinking_content = thinking or None
+
                 if message.get("tool_calls"):
-                    # LLM wants to call tools - add AssistantContent with tool_calls
-                    tool_calls_list = [
+                    tc_list = [
                         conversation.ToolCall(
                             id=tc["id"],
                             name=tc["function"]["name"],
@@ -200,11 +422,11 @@ class LemonadeConversationEntity(
                     chat_log.async_add_assistant_content(
                         conversation.AssistantContent(
                             agent_id=self.entity_id,
-                            content=message.get("content", ""),
-                            tool_calls=tool_calls_list,
+                            content=content_text,
+                            thinking_content=thinking_content,
+                            tool_calls=tc_list,
                         )
                     )
-                    # Execute the tools via ChatLog
                     for tc in message["tool_calls"]:
                         await chat_log.async_call_tool(
                             tool_name=tc["function"]["name"],
@@ -212,20 +434,16 @@ class LemonadeConversationEntity(
                             tool_call_id=tc["id"],
                             agent_id=self.entity_id,
                         )
-                    # Continue loop to let LLM respond to tool results
                     continue
 
-                # No tool calls - add final response and break
                 chat_log.async_add_assistant_content_without_tools(
                     conversation.AssistantContent(
                         agent_id=self.entity_id,
-                        content=message.get("content", ""),
+                        content=content_text,
+                        thinking_content=thinking_content,
                     )
                 )
                 break
 
-            except aiohttp.ClientError as err:
-                raise HomeAssistantError(f"Connection error: {err}") from err
         else:
-            # Max iterations reached
             raise HomeAssistantError("Max tool calling iterations reached")
