@@ -52,16 +52,27 @@ class RAGIndex:
         cache_file.write_text(json.dumps({"entries": self._entries}, ensure_ascii=False))
 
     async def _embed(self, session: aiohttp.ClientSession, text: str, server_url: str) -> list[float]:
-        url = server_url.rstrip("/") + "/embeddings"
-        resp = await session.post(
-            url,
-            json={"model": EMBED_MODEL, "input": text},
-            headers={"Content-Type": "application/json"},
-            timeout=aiohttp.ClientTimeout(total=30),
-        )
-        resp.raise_for_status()
-        body = await resp.json()
-        return body["data"][0]["embedding"]
+        # Lemonade Server embeddings endpoint (OpenAI-compatible)
+        # Try both /v1/embeddings and /embeddings paths
+        for path in ["/v1/embeddings", "/embeddings"]:
+            url = f"{server_url.rstrip('/')}{path}"
+            _LOGGER.debug("Trying embedding URL: %s", url)
+            try:
+                resp = await session.post(
+                    url,
+                    json={"model": EMBED_MODEL, "input": text},
+                    headers={"Content-Type": "application/json"},
+                    timeout=aiohttp.ClientTimeout(total=30),
+                )
+                if resp.status != 200:
+                    continue
+                body = await resp.json()
+                embedding = body["data"][0]["embedding"]
+                _LOGGER.debug("Got embedding with %d dims", len(embedding))
+                return embedding
+            except Exception:
+                continue
+        raise RuntimeError("All embedding endpoints failed")
 
     async def refresh(
         self, hass: HomeAssistant, session: aiohttp.ClientSession, server_url: str
@@ -81,20 +92,19 @@ class RAGIndex:
             text = self._build_entity_text(entry, area_name)
             try:
                 emb = await self._embed(session, text, server_url)
-            except Exception:
-                _LOGGER.warning("Embedding failed for %s, skipping", entry.entity_id)
+                self._entries.append(
+                    {
+                        "entity_id": entry.entity_id,
+                        "name": entry.name or entry.original_name or "",
+                        "domain": entry.domain,
+                        "area": area_name,
+                        "text": text,
+                        "embedding": emb,
+                    }
+                )
+            except Exception as err:
+                _LOGGER.warning("Skipping %s: %s", entry.entity_id, err)
                 continue
-
-            self._entries.append(
-                {
-                    "entity_id": entry.entity_id,
-                    "name": entry.name or entry.original_name or "",
-                    "domain": entry.domain,
-                    "area": area_name,
-                    "text": text,
-                    "embedding": emb,
-                }
-            )
 
         await self.save()
         _LOGGER.info("RAG index refreshed: %d entities", len(self._entries))

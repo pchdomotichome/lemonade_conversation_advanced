@@ -214,19 +214,20 @@ class GetEntitiesInAreaTool(llm.Tool):
         self, hass: HomeAssistant, tool_input: llm.ToolInput, llm_context: llm.LLMContext
     ) -> JsonObjectType:
         area = tool_input.tool_args["area"]
-        area_registry = hass.helpers.area_registry.async_get(hass)
-        area_entry = area_registry.async_get_area(area)
-        if not area_entry:
-            # Try to find by name
-            for a in area_registry.areas.values():
-                if a.name.lower() == area.lower():
-                    area_entry = a
-                    break
+        from homeassistant.helpers.area_registry import async_get as async_get_area_reg
+        from homeassistant.helpers.entity_registry import async_get as async_get_entity_reg
+
+        area_registry = async_get_area_reg(hass)
+        area_entry = None
+        for a in area_registry.areas.values():
+            if a.id == area or a.name.lower() == area.lower():
+                area_entry = a
+                break
 
         if not area_entry:
             return {"error": f"Area '{area}' not found"}
 
-        entity_registry = hass.helpers.entity_registry.async_get(hass)
+        entity_registry = async_get_entity_reg(hass)
         entities = [
             {"entity_id": e.entity_id, "name": e.name or e.original_name, "domain": e.domain}
             for e in entity_registry.entities.values()
