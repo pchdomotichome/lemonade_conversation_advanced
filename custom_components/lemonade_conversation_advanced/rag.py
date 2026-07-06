@@ -24,7 +24,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-EMBED_MODEL = "text-embedding-3-small"
+EMBED_MODEL = "Qwen3-Embedding-0.6B-GGUF"
 RAG_TOP_K = 12
 RAG_SCORE_THRESHOLD = 0.15
 RAG_CACHE_DIR_NAME = "lemonade_rag_cache"
