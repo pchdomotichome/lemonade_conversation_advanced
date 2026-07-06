@@ -76,28 +76,42 @@ class LemonadeConversationEntity(
         conversation.async_unset_agent(self.hass, self.entry)
         await super().async_will_remove_from_hass()
 
+    async def _async_prepare_chat_log(
+        self,
+        user_input: conversation.ConversationInput,
+        chat_log: conversation.ChatLog,
+    ) -> None:
+        """Prepare LLM/tool context for the chat log."""
+        options = self.subentry.data
+        await chat_log.async_provide_llm_data(
+            user_input.as_llm_context(DOMAIN),
+            options.get(CONF_LLM_HASS_API),
+            options.get(CONF_PROMPT),
+            user_input.extra_system_prompt,
+        )
+
     @override
     async def _async_handle_message(
         self,
         user_input: conversation.ConversationInput,
         chat_log: conversation.ChatLog,
     ) -> conversation.ConversationResult:
-        """Call the API."""
-        options = self.subentry.data
-
+        """Handle a message and return the final conversation result."""
         try:
-            await chat_log.async_provide_llm_data(
-                user_input.as_llm_context(DOMAIN),
-                options.get(CONF_LLM_HASS_API),
-                options.get(CONF_PROMPT),
-                user_input.extra_system_prompt,
-            )
+            await self._async_prepare_chat_log(user_input, chat_log)
         except conversation.ConverseError as err:
             return err.as_conversation_result()
 
         await self._async_handle_chat_log(chat_log)
 
         return conversation.async_get_result_from_chat_log(user_input, chat_log)
+
+    async def async_process(
+        self,
+        user_input: conversation.ConversationInput,
+    ) -> conversation.ConversationResult:
+        """Process a sentence, keeping HA's streaming path available."""
+        return await super().async_process(user_input)
 
     # ------------------------------------------------------------------ #
     #  Helpers – build messages / payload from ChatLog                     #
@@ -220,8 +234,9 @@ class LemonadeConversationEntity(
         import json as _json
 
         content_buf = ""
-        thinking_buf = ""
         tc_accum: dict[int, dict[str, Any]] = {}
+        in_thinking = False
+        thinking_tag_buffer = ""
 
         async for raw_line in response.content:
             if not raw_line:
@@ -244,7 +259,7 @@ class LemonadeConversationEntity(
                     delta["tool_calls"] = msg["tool_calls"]
                 if not delta:
                     continue
-                line_data = delta  # use directly below
+                line_data = delta
 
             # OpenAI SSE format
             elif line.startswith("data: "):
@@ -261,27 +276,50 @@ class LemonadeConversationEntity(
             else:
                 continue
 
-            # -- text content ------------------------------------------- #
             raw_content = line_data.get("content") or ""
             if raw_content:
                 content_buf += raw_content
-                # Extract complete thinking tags from buffer
-                cleaned, thinking = self._extract_thinking(content_buf)
-                if thinking:
-                    thinking_buf += thinking
-                    content_buf = cleaned
-                # Yield whatever clean content we have
-                if content_buf.strip():
+
+                if not in_thinking and "<think>" not in content_buf and "<|thought|>" not in content_buf:
                     yield {"content": content_buf}
                     content_buf = ""
+                else:
+                    while content_buf:
+                        if in_thinking:
+                            end_tag = "</think>" if thinking_tag_buffer == "<think>" else "<|/thought|>"
+                            end_idx = content_buf.find(end_tag)
+                            if end_idx == -1:
+                                break
+                            content_buf = content_buf[end_idx + len(end_tag):]
+                            in_thinking = False
+                            thinking_tag_buffer = ""
+                            continue
 
-            # -- thinking_content field (Gemini-style) ------------------ #
+                        think_idx = content_buf.find("<think>")
+                        alt_idx = content_buf.find("<|thought|>")
+                        candidates = [idx for idx in (think_idx, alt_idx) if idx != -1]
+                        if not candidates:
+                            if content_buf:
+                                yield {"content": content_buf}
+                                content_buf = ""
+                            break
+
+                        next_idx = min(candidates)
+                        if next_idx > 0:
+                            yield {"content": content_buf[:next_idx]}
+
+                        if think_idx != -1 and think_idx == next_idx:
+                            thinking_tag_buffer = "<think>"
+                            content_buf = content_buf[next_idx + len("<think>"):]
+                        else:
+                            thinking_tag_buffer = "<|thought|>"
+                            content_buf = content_buf[next_idx + len("<|thought|>"):]
+                        in_thinking = True
+
             tc_field = line_data.get("thinking_content") or ""
             if tc_field:
-                thinking_buf += tc_field
                 yield {"thinking_content": tc_field}
 
-            # -- tool calls (accumulate by index) ------------------------ #
             for tc_delta in line_data.get("tool_calls") or []:
                 idx = tc_delta.get("index", 0)
                 if idx not in tc_accum:
@@ -295,12 +333,8 @@ class LemonadeConversationEntity(
                 if "arguments" in func:
                     entry["args_str"] = entry.get("args_str", "") + func["arguments"]
 
-        # Flush remaining buffered content
-        if content_buf.strip():
-            cleaned, thinking = self._extract_thinking(content_buf)
-            if thinking:
-                thinking_buf += thinking
-            yield {"content": cleaned}
+        if content_buf and not in_thinking:
+            yield {"content": content_buf}
 
         # Flush accumulated tool calls
         for idx in sorted(tc_accum):
