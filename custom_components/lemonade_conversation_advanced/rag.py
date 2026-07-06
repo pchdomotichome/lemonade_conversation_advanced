@@ -52,27 +52,27 @@ class RAGIndex:
         cache_file.write_text(json.dumps({"entries": self._entries}, ensure_ascii=False))
 
     async def _embed(self, session: aiohttp.ClientSession, text: str, server_url: str) -> list[float]:
-        # Lemonade Server embeddings endpoint (OpenAI-compatible)
-        # Try both /v1/embeddings and /embeddings paths
-        for path in ["/v1/embeddings", "/embeddings"]:
-            url = f"{server_url.rstrip('/')}{path}"
-            _LOGGER.debug("Trying embedding URL: %s", url)
-            try:
-                resp = await session.post(
-                    url,
-                    json={"model": EMBED_MODEL, "input": text},
-                    headers={"Content-Type": "application/json"},
-                    timeout=aiohttp.ClientTimeout(total=30),
-                )
-                if resp.status != 200:
-                    continue
-                body = await resp.json()
-                embedding = body["data"][0]["embedding"]
-                _LOGGER.debug("Got embedding with %d dims", len(embedding))
-                return embedding
-            except Exception:
-                continue
-        raise RuntimeError("All embedding endpoints failed")
+        # Lemonade Server embeddings endpoint (OpenAI-compatible) - only /v1/embeddings works
+        url = f"{server_url.rstrip('/')}/v1/embeddings"
+        _LOGGER.debug("Requesting embedding from %s for text: %s...", url, text[:50])
+        try:
+            resp = await session.post(
+                url,
+                json={"model": EMBED_MODEL, "input": text},
+                headers={"Content-Type": "application/json"},
+                timeout=aiohttp.ClientTimeout(total=30),
+            )
+            if resp.status != 200:
+                text_resp = await resp.text()
+                _LOGGER.error("Embedding API error %s: %s", resp.status, text_resp[:200])
+                raise RuntimeError(f"API {resp.status}: {text_resp[:200]}")
+            body = await resp.json()
+            embedding = body["data"][0]["embedding"]
+            _LOGGER.debug("Got embedding with %d dims", len(embedding))
+            return embedding
+        except Exception as err:
+            _LOGGER.error("Embedding request failed: %s", err)
+            raise
 
     async def refresh(
         self, hass: HomeAssistant, session: aiohttp.ClientSession, server_url: str
