@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from collections.abc import AsyncGenerator
 from typing import Any, Literal, override
-
 import aiohttp
 
 from homeassistant.components import conversation
@@ -15,6 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from voluptuous_openapi import convert
 
 from .const import DOMAIN
 from .entity import LemonadeBaseEntity
@@ -188,7 +188,7 @@ class LemonadeConversationEntity(
         return headers
 
     def _get_tools(self, chat_log: conversation.ChatLog) -> list[dict[str, Any]] | None:
-        """Extract tool definitions from ChatLog."""
+        """Extract tool definitions from ChatLog and convert to OpenAI format."""
         if not chat_log.llm_api:
             return None
         return [
@@ -197,7 +197,7 @@ class LemonadeConversationEntity(
                 "function": {
                     "name": tool.name,
                     "description": tool.description,
-                    "parameters": tool.parameters.schema if tool.parameters else {},
+                    "parameters": convert(tool.parameters),
                 },
             }
             for tool in chat_log.llm_api.tools
