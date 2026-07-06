@@ -18,6 +18,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import DOMAIN
 from .entity import LemonadeBaseEntity
+from .rag import RAGIndex
 
 # Regex patterns for thinking/reasoning tags embedded in content
 _THINKING_PATTERNS = [
@@ -394,6 +395,32 @@ class LemonadeConversationEntity(
         api_url = f"{server_url}/v1/chat/completions"
         tools = self._get_tools(chat_log)
         max_iterations = 5
+
+        # RAG: semantic entity retrieval per user prompt
+        options = self.subentry.data
+        enable_rag = options.get("enable_rag", True)
+        rag_top_k = options.get("rag_top_k", 12)
+        if enable_rag and server_url:
+            cache_dir = f"{self.hass.config.config_dir}/lemonade_rag_cache"
+            rag_index = RAGIndex(cache_dir)
+            await rag_index.load()
+            if not rag_index._entries:
+                try:
+                    await rag_index.refresh(self.hass, session, server_url)
+                except Exception:
+                    enable_rag = False
+            else:
+                user_prompt = chat_log.content[-1].content if chat_log.content else ""
+                if user_prompt:
+                    try:
+                        relevant = await rag_index.query(session, user_prompt, server_url, top_k=rag_top_k)
+                        if relevant:
+                            entity_context = "Relevant entities for this request:\n"
+                            for e in relevant:
+                                entity_context += f"- {e['entity_id']} ({e['domain']}) in {e['area'] or 'unassigned'}: {e['name']}\n"
+                            chat_log.async_add_system_content(entity_context)
+                    except Exception:
+                        pass
 
         for iteration in range(max_iterations):
             messages = self._build_messages(chat_log)

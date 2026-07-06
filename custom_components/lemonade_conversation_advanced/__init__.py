@@ -10,6 +10,7 @@ from homeassistant.helpers import llm
 
 from .const import DOMAIN, CONF_SERVER_URL, CONF_API_KEY
 from .index_manager import IndexManager
+from .rag import RAGIndex
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,7 +43,6 @@ class LemonadeLLMAPI(llm.API):
 
     async def async_get_api_instance(self, llm_context: llm.LLMContext) -> llm.APIInstance:
         """Return the instance of the API."""
-        # Get tools from our platform
         tools_result = await async_get_tools(self.hass, llm_context, DOMAIN)
         if tools_result is None:
             return llm.APIInstance(
@@ -92,6 +92,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "server_url": server_url,
         "api_key": api_key,
     }
+
+    # Create per-entry RAG index (lazy-loaded)
+    cache_dir = f"{hass.config.config_dir}/lemonade_rag_cache"
+    rag_index = RAGIndex(cache_dir)
+    await rag_index.load()
+    hass.data[DOMAIN]["rag_index"] = rag_index
 
     # Forward to platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

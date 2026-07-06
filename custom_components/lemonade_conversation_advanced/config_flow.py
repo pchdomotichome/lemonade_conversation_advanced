@@ -36,12 +36,16 @@ from .const import (
     CONF_SYSTEM_PROMPT,
     CONF_TEMPERATURE,
     CONF_MAX_TOKENS,
+    CONF_ENABLE_RAG,
+    CONF_RAG_TOP_K,
     DEFAULT_SERVER_URL,
     DEFAULT_MODEL_NAME,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEMPERATURE,
     DEFAULT_MAX_TOKENS,
     CONF_LLM_HASS_API,
+    DEFAULT_ENABLE_RAG,
+    DEFAULT_RAG_TOP_K,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,6 +56,8 @@ DEFAULT_CONVERSATION_DATA = {
     CONF_TEMPERATURE: 0.7,
     CONF_MAX_TOKENS: 2048,
     CONF_LLM_HASS_API: None,
+    CONF_ENABLE_RAG: DEFAULT_ENABLE_RAG,
+    CONF_RAG_TOP_K: DEFAULT_RAG_TOP_K,
 }
 
 DEFAULT_AI_TASK_DATA = {
@@ -361,6 +367,24 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                             mode=SelectSelectorMode.DROPDOWN,
                             translation_key="llm_hass_api",
                         )
+                    ),
+                    vol.Optional(
+                        CONF_ENABLE_RAG,
+                        default=options.get(CONF_ENABLE_RAG, DEFAULT_ENABLE_RAG),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value="1", label="On"),
+                                SelectOptionDict(value="0", label="Off"),
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_RAG_TOP_K,
+                        default=options.get(CONF_RAG_TOP_K, DEFAULT_RAG_TOP_K),
+                    ): NumberSelector(
+                        NumberSelectorConfig(min=1, max=50, step=1, mode=NumberSelectorMode.BOX)
                     ),
                 }
             ),
