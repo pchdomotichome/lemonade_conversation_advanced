@@ -9,19 +9,6 @@ import voluptuous as vol
 from homeassistant.helpers import llm
 from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.selector import (
-    EntitySelector,
-    EntitySelectorConfig,
-    NumberSelector,
-    NumberSelectorConfig,
-    NumberSelectorMode,
-    SelectSelector,
-    SelectSelectorConfig,
-    SelectSelectorMode,
-    TextSelector,
-    TextSelectorConfig,
-    TextSelectorType,
-)
 from homeassistant.util.json import JsonObjectType
 
 from .const import DOMAIN
@@ -35,9 +22,7 @@ class GetEntityStateTool(llm.Tool):
     description = "Get the current state of an entity by its entity_id."
     parameters = vol.Schema(
         {
-            vol.Required("entity_id"): TextSelector(
-                TextSelectorConfig(type=TextSelectorType.TEXT)
-            ).schema,
+            vol.Required("entity_id"): str,
         }
     )
 
@@ -65,9 +50,7 @@ class TurnOnEntityTool(llm.Tool):
     description = "Turn on an entity (light, switch, climate, fan, etc.)."
     parameters = vol.Schema(
         {
-            vol.Required("entity_id"): EntitySelector(
-                EntitySelectorConfig()
-            ).schema,
+            vol.Required("entity_id"): str,
         }
     )
 
@@ -96,9 +79,7 @@ class TurnOffEntityTool(llm.Tool):
     description = "Turn off an entity (light, switch, climate, fan, etc.)."
     parameters = vol.Schema(
         {
-            vol.Required("entity_id"): EntitySelector(
-                EntitySelectorConfig()
-            ).schema,
+            vol.Required("entity_id"): str,
         }
     )
 
@@ -127,9 +108,7 @@ class ToggleEntityTool(llm.Tool):
     description = "Toggle an entity (light, switch, fan, etc.)."
     parameters = vol.Schema(
         {
-            vol.Required("entity_id"): EntitySelector(
-                EntitySelectorConfig()
-            ).schema,
+            vol.Required("entity_id"): str,
         }
     )
 
@@ -158,18 +137,9 @@ class SetEntityValueTool(llm.Tool):
     description = "Set a numeric value on an entity (brightness, temperature, position, volume, etc.)."
     parameters = vol.Schema(
         {
-            vol.Required("entity_id"): EntitySelector(
-                EntitySelectorConfig()
-            ).schema,
-            vol.Required("value"): NumberSelector(
-                NumberSelectorConfig(min=0, max=100, step=1, mode=NumberSelectorMode.SLIDER)
-            ).schema,
-            vol.Required("attribute"): SelectSelector(
-                SelectSelectorConfig(
-                    options=["brightness", "temperature", "position", "volume_level", "humidity"],
-                    mode=SelectSelectorMode.DROPDOWN,
-                )
-            ).schema,
+            vol.Required("entity_id"): str,
+            vol.Required("value"): vol.Coerce(float),
+            vol.Required("attribute"): vol.In(["brightness", "temperature", "position", "volume_level", "humidity"]),
         }
     )
 
@@ -236,9 +206,7 @@ class GetEntitiesInAreaTool(llm.Tool):
     description = "Get all entities in a specific area."
     parameters = vol.Schema(
         {
-            vol.Required("area"): TextSelector(
-                TextSelectorConfig(type=TextSelectorType.TEXT)
-            ).schema,
+            vol.Required("area"): str,
         }
     )
 
