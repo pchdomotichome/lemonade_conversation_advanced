@@ -11,8 +11,11 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import aiohttp_client, llm
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    EntitySelector,
+    EntitySelectorConfig,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -38,6 +41,7 @@ from .const import (
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEMPERATURE,
     DEFAULT_MAX_TOKENS,
+    CONF_LLM_HASS_API,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -47,6 +51,7 @@ DEFAULT_CONVERSATION_DATA = {
     CONF_SYSTEM_PROMPT: "You are a helpful Home Assistant voice assistant.",
     CONF_TEMPERATURE: 0.7,
     CONF_MAX_TOKENS: 2048,
+    CONF_LLM_HASS_API: None,
 }
 
 DEFAULT_AI_TASK_DATA = {
@@ -306,6 +311,12 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
         models = await self._fetch_models(entry)
         model_options = models or ["No models found"]
 
+        # Fetch available LLM APIs for HA control
+        llm_apis = llm.async_get_apis(self.hass)
+        llm_api_options = [{"value": api.id, "label": api.name} for api in llm_apis]
+        if not llm_api_options:
+            llm_api_options = [{"value": "none", "label": "No LLM APIs available"}]
+
         return self.async_show_form(
             step_id="set_options",
             data_schema=vol.Schema(
@@ -340,6 +351,16 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                         default=options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS),
                     ): NumberSelector(
                         NumberSelectorConfig(min=256, max=32768, step=256, mode=NumberSelectorMode.BOX)
+                    ),
+                    vol.Optional(
+                        CONF_LLM_HASS_API,
+                        default=options.get(CONF_LLM_HASS_API),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=llm_api_options,
+                            mode=SelectSelectorMode.DROPDOWN,
+                            translation_key="llm_hass_api",
+                        )
                     ),
                 }
             ),

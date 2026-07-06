@@ -6,6 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import llm
 
 from .const import DOMAIN, CONF_SERVER_URL, CONF_API_KEY
 from .index_manager import IndexManager
@@ -24,7 +25,39 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     await index_manager.start()
     hass.data[DOMAIN]["index_manager"] = index_manager
 
+    # Register LLM tools platform
+    llm.async_register_api(hass, LemonadeLLMAPI(hass))
+
     return True
+
+
+class LemonadeLLMAPI(llm.API):
+    """LLM API for Lemonade Conversation Advanced."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize the API."""
+        super().__init__(hass=hass, id=DOMAIN, name="Lemonade Conversation Advanced")
+
+    async def async_get_api_instance(self, llm_context: llm.LLMContext) -> llm.APIInstance:
+        """Return the instance of the API."""
+        # Get tools from our platform
+        from .llm import async_get_tools
+
+        tools_result = await async_get_tools(self.hass, llm_context, DOMAIN)
+        if tools_result is None:
+            return llm.APIInstance(
+                api=self,
+                api_prompt="Lemonade Conversation Advanced tools",
+                llm_context=llm_context,
+                tools=[],
+            )
+
+        return llm.APIInstance(
+            api=self,
+            api_prompt="Lemonade Conversation Advanced tools",
+            llm_context=llm_context,
+            tools=tools_result.tools,
+        )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

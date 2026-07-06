@@ -46,6 +46,7 @@ CONF_FOLLOW_UP_PHRASES = "follow_up_phrases"
 CONF_END_WORDS = "end_words"
 CONF_CLEAN_RESPONSES = "clean_responses"
 CONF_TIMEOUT = "timeout"
+CONF_LLM_HASS_API = "llm_hass_api"
 
 # Default values
 DEFAULT_SERVER_TYPE = "lmstudio"
