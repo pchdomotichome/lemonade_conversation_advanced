@@ -10,6 +10,7 @@ from homeassistant.helpers import llm
 
 from .const import DOMAIN, CONF_SERVER_URL, CONF_API_KEY
 from .index_manager import IndexManager
+from .llm_tools import async_get_tools as local_async_get_tools
 from .rag import RAGIndex
 
 _LOGGER = logging.getLogger(__name__)
@@ -27,8 +28,6 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data[DOMAIN]["index_manager"] = index_manager
 
     # Register LLM tools platform
-    from .llm import async_get_tools
-
     llm.async_register_api(hass, LemonadeLLMAPI(hass))
 
     return True
@@ -43,7 +42,7 @@ class LemonadeLLMAPI(llm.API):
 
     async def async_get_api_instance(self, llm_context: llm.LLMContext) -> llm.APIInstance:
         """Return the instance of the API."""
-        tools_result = await async_get_tools(self.hass, llm_context, DOMAIN)
+        tools_result = await local_async_get_tools(self.hass, llm_context, DOMAIN)
         if tools_result is None:
             return llm.APIInstance(
                 api=self,

@@ -18,6 +18,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import DOMAIN
 from .entity import LemonadeBaseEntity
+from .llm_tools import async_get_tools as local_async_get_tools
 from .rag import RAGIndex
 
 # Regex patterns for thinking/reasoning tags embedded in content
