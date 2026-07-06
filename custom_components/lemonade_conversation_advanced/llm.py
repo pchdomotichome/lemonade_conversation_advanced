@@ -6,7 +6,7 @@ from typing import Literal
 
 import voluptuous as vol
 
-from homeassistant.components import llm
+from homeassistant.helpers import llm
 from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.selector import (
