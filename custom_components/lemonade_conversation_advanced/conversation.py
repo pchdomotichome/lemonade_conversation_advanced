@@ -460,7 +460,7 @@ class LemonadeConversationEntity(
                                 state_obj = self.hass.states.get(e["entity_id"])
                                 state_str = state_obj.state if state_obj else "unknown"
                                 entity_context += f"- {e['entity_id']} (domain: {e['domain']}, state: {state_str}) in {e['area'] or 'unassigned'}: {e['name']}\n"
-                            chat_log.async_add_system_content(entity_context)
+                            chat_log.content.append(conversation.SystemContent(content=entity_context))
                     except Exception:
                         pass
 
