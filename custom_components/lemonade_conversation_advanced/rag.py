@@ -79,10 +79,12 @@ class RAGIndex:
             raise
 
     async def refresh(
-        self, hass: HomeAssistant, session: aiohttp.ClientSession, server_url: str
+        self, hass: HomeAssistant, session: aiohttp.ClientSession, server_url: str, api_key: str = ""
     ) -> int:
         await self.load()
         self._entries.clear()
+        # Update api_key in case this is being called standalone
+        self._api_key = api_key
 
         entity_reg = async_get_entity_reg(hass)
         area_reg = async_get_area_reg(hass)
@@ -171,7 +173,8 @@ async def build_rag_instructions(
         return None
 
     cache_dir = os.path.join(hass.config.config_dir, RAG_CACHE_DIR_NAME)
-    index = RAGIndex(cache_dir)
+    api_key = config_entry.data.get("api_key", "")
+    index = RAGIndex(cache_dir, api_key)
     await index.load()
 
     if not index._entries:
@@ -184,7 +187,7 @@ async def build_rag_instructions(
     cached_ids = {e["entity_id"] for e in index._entries}
     if current_ids != cached_ids:
         async with aiohttp.ClientSession() as session:
-            await index.refresh(hass, session, server_url)
+            await index.refresh(hass, session, server_url, api_key)
 
     # Semantic search against the prompt (passed in as context)
     # For now return entity list; full semantic search per-query done in conversation.py
