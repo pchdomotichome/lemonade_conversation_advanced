@@ -370,11 +370,25 @@ class LemonadeConversationEntity(
         if content_buf and not in_thinking:
             yield {"content": content_buf}
 
-        # Store accumulated tool calls for later retrieval by the caller.
-        # Must NOT yield them here because HA's async_add_delta_content_stream
-        # (chat_log.py:532) expects tool_calls entries to have an '.external'
-        # attribute, not be plain dicts.
-        self._tc_accum = tc_accum
+        # Yield accumulated tool calls as ToolInput objects so
+        # async_add_delta_content_stream can execute them via
+        # chat_log.llm_api.async_call_tool internally.
+        for idx in sorted(tc_accum):
+            tc = tc_accum[idx]
+            if "id" in tc and "name" in tc and "args_str" in tc:
+                try:
+                    args = _json.loads(tc["args_str"])
+                except (_json.JSONDecodeError, ValueError):
+                    args = {}
+                yield {
+                    "tool_calls": [
+                        ToolInput(
+                            tool_name=tc["name"],
+                            tool_args=args,
+                            id=tc["id"],
+                        )
+                    ]
+                }
 
     # ------------------------------------------------------------------ #
     #  Non-streaming fallback                                              #
@@ -466,62 +480,20 @@ class LemonadeConversationEntity(
                         _LOGGER.error("Streaming LLM error (status %d): %s", resp.status, err_text)
                         raise HomeAssistantError(f"LLM error: {err_text}")
 
-                    # Stream deltas to chat_log using async for (HA API expects async generator)
-                    harvested_tcs: list[dict[str, Any]] = []
+                    # Stream deltas to chat_log – tool calls are yielded as ToolInput
+                    # objects from _iter_sse_deltas, and async_add_delta_content_stream
+                    # executes them via chat_log.llm_api.async_call_tool internally.
                     async for delta in chat_log.async_add_delta_content_stream(
                         self.entity_id,
                         self._iter_sse_deltas(resp),
                     ):
                         _LOGGER.debug("Chat log received delta: %s", delta)
 
-                    # Collect tool calls accumulated by _iter_sse_deltas.
-                    # They are NOT yielded through the delta stream because HA's
-                    # async_add_delta_content_stream expects tool calls as objects
-                    # with an .external attribute, not plain dicts.
-                    tc_accum = getattr(self, "_tc_accum", {})
-                    for idx in sorted(tc_accum):
-                        tc = tc_accum[idx]
-                        if "id" in tc and "name" in tc and "args_str" in tc:
-                            try:
-                                args = json.loads(tc["args_str"])
-                            except (json.JSONDecodeError, ValueError):
-                                args = {}
-                            harvested_tcs.append({
-                                "id": tc["id"],
-                                "name": tc["name"],
-                                "args": args,
-                            })
-                    if "_tc_accum" in self.__dict__:
-                        del self._tc_accum
-
-                    _LOGGER.debug("Harvested tool calls: %s", harvested_tcs)
-
-                    # Execute harvested tool calls
-                    if harvested_tcs:
-                        for tc in harvested_tcs:
-                            try:
-                                await chat_log.async_call_tool(
-                                    tool_name=tc["name"],
-                                    tool_args=tc["args"],
-                                    tool_call_id=tc["id"],
-                                    agent_id=self.entity_id,
-                                )
-                            except Exception as err:
-                                _LOGGER.warning("Tool call failed: %s - %s", tc["name"], err)
-                                # Inject tool result so chat_log stays consistent
-                                # and the LLM can retry with a valid tool
-                                error_result = {"error": f"Tool '{tc['name']}' is not available: {err}"}
-                                try:
-                                    chat_log.content.append(
-                                        conversation.ToolResultContent(
-                                            agent_id=self.entity_id,
-                                            tool_call_id=tc["id"],
-                                            tool_result=error_result,
-                                        )
-                                    )
-                                except Exception:
-                                    _LOGGER.exception("Failed to inject tool result")
-                        continue  # tool results will flow next iteration
+                    # If the last entry in chat_log is a tool result (added by
+                    # async_add_delta_content_stream), continue the loop so the LLM
+                    # sees the result in the next iteration.
+                    if chat_log.unresponded_tool_results:
+                        continue
 
                     # No tool calls – final text response
                     break
@@ -547,45 +519,29 @@ class LemonadeConversationEntity(
                     thinking_content = thinking or None
 
                 if message.get("tool_calls"):
-                    # Add content without tool_calls (ToolCall class doesn't exist
-                    # in this HA version; async_call_tool handles registry internally)
-                    chat_log.async_add_assistant_content_without_tools(
+                    tool_inputs = [
+                        ToolInput(
+                            tool_name=tc["function"]["name"],
+                            tool_args=tc["function"]["arguments"] if isinstance(tc["function"]["arguments"], dict) else json.loads(tc["function"]["arguments"]),
+                            id=tc["id"],
+                        )
+                        for tc in message["tool_calls"]
+                    ]
+                    async for _ in chat_log.async_add_assistant_content(
                         conversation.AssistantContent(
                             agent_id=self.entity_id,
-                            content=content_text,
+                            content=content_text or None,
                             thinking_content=thinking_content,
+                            tool_calls=tool_inputs,
                         ),
-                    )
-                    for tc in message["tool_calls"]:
-                        args = tc["function"]["arguments"]
-                        if not isinstance(args, dict):
-                            args = json.loads(args)
-                        try:
-                            await chat_log.async_call_tool(
-                                tool_name=tc["function"]["name"],
-                                tool_args=args,
-                                tool_call_id=tc["id"],
-                                agent_id=self.entity_id,
-                            )
-                        except Exception as err:
-                            _LOGGER.warning("Tool call failed (non-streaming): %s - %s", tc["function"]["name"], err)
-                            error_result = {"error": f"Tool '{tc['function']['name']}' is not available: {err}"}
-                            try:
-                                chat_log.content.append(
-                                    conversation.ToolResultContent(
-                                        agent_id=self.entity_id,
-                                        tool_call_id=tc["id"],
-                                        tool_result=error_result,
-                                    )
-                                )
-                            except Exception:
-                                _LOGGER.exception("Failed to inject tool result")
+                    ):
+                        pass
                     continue
 
                 chat_log.async_add_assistant_content_without_tools(
                     conversation.AssistantContent(
                         agent_id=self.entity_id,
-                        content=content_text,
+                        content=content_text or None,
                         thinking_content=thinking_content,
                     ),
                 )
