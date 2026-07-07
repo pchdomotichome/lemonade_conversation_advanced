@@ -435,7 +435,7 @@ class LemonadeConversationEntity(
 
         _LOGGER.debug("Starting chat with server_url=%s, model=%s", server_url, self.subentry.data.get("model_name"))
 
-        # RAG: semantic entity retrieval per user prompt
+        # RAG: local keyword-based entity retrieval per user prompt
         options = self.subentry.data
         enable_rag = options.get("enable_rag", True)
         rag_top_k = options.get("rag_top_k", 12)
@@ -446,14 +446,14 @@ class LemonadeConversationEntity(
             await rag_index.load()
             if not rag_index._entries:
                 try:
-                    await rag_index.refresh(self.hass, session, server_url, api_key)
+                    await rag_index.refresh(self.hass)
                 except Exception:
                     enable_rag = False
             else:
                 user_prompt = chat_log.content[-1].content if chat_log.content else ""
                 if user_prompt:
                     try:
-                        relevant = await rag_index.query(session, user_prompt, server_url, top_k=rag_top_k)
+                        relevant = await rag_index.query(user_prompt, top_k=rag_top_k)
                         if relevant:
                             entity_context = "Current states of relevant entities for this request:\n"
                             for e in relevant:
