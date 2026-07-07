@@ -337,9 +337,11 @@ class LemonadeConversationEntity(
                         content_buf = content_buf[next_idx + len("<|thought|>"):]
                     in_thinking = True
 
-            tc_field = delta.get("thinking_content") or ""
-            if tc_field:
-                yield {"thinking_content": tc_field}
+            # Lemonade uses 'reasoning_content' instead of 'thinking_content'
+            # Map both to thinking_content for HA compatibility
+            rc_field = delta.get("reasoning_content") or delta.get("thinking_content") or ""
+            if rc_field:
+                yield {"thinking_content": rc_field}
 
             for tc_delta in delta.get("tool_calls") or []:
                 idx = tc_delta.get("index", 0)
@@ -470,10 +472,15 @@ class LemonadeConversationEntity(
                     harvested_tcs: list[dict[str, Any]] = []
                     async for delta in self._parse_sse_stream(resp, chat_log):
                         _LOGGER.debug("Got delta: %s", delta)
-                        if "content" in delta or "thinking_content" in delta:
+                        # Stream content and thinking deltas
+                        if "content" in delta or "thinking_content" in delta or "reasoning_content" in delta:
+                            # Normalize: rename reasoning_content -> thinking_content for HA
+                            normalized_delta = dict(delta)
+                            if "reasoning_content" in normalized_delta and "thinking_content" not in normalized_delta:
+                                normalized_delta["thinking_content"] = normalized_delta.pop("reasoning_content")
                             await chat_log.async_add_delta_content_stream(
                                 self.entity_id,
-                                [delta],
+                                [normalized_delta],
                             )
                         if "tool_calls" in delta:
                             for tc in delta["tool_calls"]:
