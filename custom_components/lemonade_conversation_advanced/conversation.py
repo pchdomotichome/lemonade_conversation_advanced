@@ -23,7 +23,7 @@ from .rag import RAGIndex
 
 # Regex patterns for thinking/reasoning tags embedded in content
 _THINKING_PATTERNS = [
-    re.compile(r"<think>(.*?)</think>", re.DOTALL | re.IGNORECASE),
+    re.compile(r"nk(.*?)k", re.DOTALL | re.IGNORECASE),
     re.compile(r"<\|thought\|>(.*?)<\|/thought\|>", re.DOTALL | re.IGNORECASE),
 ]
 
@@ -240,31 +240,25 @@ class LemonadeConversationEntity(
         in_thinking = False
         thinking_tag_buffer = ""
 
-        async for raw_line in response.content:
-            if not raw_line:
+        # Use text() to read entire response body - more reliable than iter_chunks
+        # for Lemonade Server which may send non-chunked responses
+        try:
+            text = await response.text()
+        except Exception:
+            # Fallback to reading in chunks if full text fails
+            chunks = []
+            async for chunk in response.content.iter_chunked(4096):
+                chunks.append(chunk.decode("utf-8", errors="replace"))
+            text = "".join(chunks)
+
+        # Process line by line
+        for line in text.split("\n"):
+            line = line.strip()
+            if not line:
                 continue
-            line = raw_line.decode("utf-8").strip()
 
-            # Ollama: complete JSON per line
-            if line.startswith("{"):
-                try:
-                    data = _json.loads(line)
-                except ValueError:
-                    continue
-                if data.get("done"):
-                    break
-                msg = data.get("message", {})
-                delta: dict[str, Any] = {}
-                if msg.get("content"):
-                    delta["content"] = msg["content"]
-                if msg.get("tool_calls"):
-                    delta["tool_calls"] = msg["tool_calls"]
-                if not delta:
-                    continue
-                line_data = delta
-
-            # OpenAI SSE format
-            elif line.startswith("data: "):
+            # OpenAI SSE format: "data: {...}" or "data: [DONE]"
+            if line.startswith("data: "):
                 if line == "data: [DONE]":
                     break
                 try:
@@ -272,57 +266,63 @@ class LemonadeConversationEntity(
                 except ValueError:
                     continue
                 choice = data.get("choices", [{}])[0]
-                line_data = choice.get("delta", {})
-                if not line_data:
+                delta = choice.get("delta", {})
+            # Ollama format: raw JSON per line (non-streaming returns single JSON)
+            elif line.startswith("{"):
+                try:
+                    data = _json.loads(line)
+                except ValueError:
                     continue
+                if data.get("done"):
+                    break
+                delta = data.get("message", {})
             else:
                 continue
 
-            raw_content = line_data.get("content") or ""
+            if not delta:
+                continue
+
+            raw_content = delta.get("content") or ""
             if raw_content:
                 content_buf += raw_content
 
-                if not in_thinking and "<think>" not in content_buf and "<|thought|>" not in content_buf:
-                    yield {"content": content_buf}
-                    content_buf = ""
-                else:
-                    while content_buf:
-                        if in_thinking:
-                            end_tag = "</think>" if thinking_tag_buffer == "<think>" else "<|/thought|>"
-                            end_idx = content_buf.find(end_tag)
-                            if end_idx == -1:
-                                break
-                            content_buf = content_buf[end_idx + len(end_tag):]
-                            in_thinking = False
-                            thinking_tag_buffer = ""
-                            continue
-
-                        think_idx = content_buf.find("<think>")
-                        alt_idx = content_buf.find("<|thought|>")
-                        candidates = [idx for idx in (think_idx, alt_idx) if idx != -1]
-                        if not candidates:
-                            if content_buf:
-                                yield {"content": content_buf}
-                                content_buf = ""
+                # Handle thinking tags
+                while content_buf:
+                    if in_thinking:
+                        end_tag = "k" if thinking_tag_buffer == "nk" else "<|/thought|>"
+                        end_idx = content_buf.find(end_tag)
+                        if end_idx == -1:
                             break
+                        content_buf = content_buf[end_idx + len(end_tag):]
+                        in_thinking = False
+                        thinking_tag_buffer = ""
+                        continue
 
-                        next_idx = min(candidates)
-                        if next_idx > 0:
-                            yield {"content": content_buf[:next_idx]}
+                    think_idx = content_buf.find("nk")
+                    alt_idx = content_buf.find("<|thought|>")
+                    candidates = [idx for idx in (think_idx, alt_idx) if idx != -1]
+                    if not candidates:
+                        yield {"content": content_buf}
+                        content_buf = ""
+                        break
 
-                        if think_idx != -1 and think_idx == next_idx:
-                            thinking_tag_buffer = "<think>"
-                            content_buf = content_buf[next_idx + len("<think>"):]
-                        else:
-                            thinking_tag_buffer = "<|thought|>"
-                            content_buf = content_buf[next_idx + len("<|thought|>"):]
-                        in_thinking = True
+                    next_idx = min(candidates)
+                    if next_idx > 0:
+                        yield {"content": content_buf[:next_idx]}
 
-            tc_field = line_data.get("thinking_content") or ""
+                    if think_idx != -1 and think_idx == next_idx:
+                        thinking_tag_buffer = "nk"
+                        content_buf = content_buf[next_idx + 2:]
+                    else:
+                        thinking_tag_buffer = "<|thought|>"
+                        content_buf = content_buf[next_idx + len("<|thought|>"):]
+                    in_thinking = True
+
+            tc_field = delta.get("thinking_content") or ""
             if tc_field:
                 yield {"thinking_content": tc_field}
 
-            for tc_delta in line_data.get("tool_calls") or []:
+            for tc_delta in delta.get("tool_calls") or []:
                 idx = tc_delta.get("index", 0)
                 if idx not in tc_accum:
                     tc_accum[idx] = {}
@@ -408,7 +408,7 @@ class LemonadeConversationEntity(
             await rag_index.load()
             if not rag_index._entries:
                 try:
-                    await rag_index.refresh(self.hass, session, server_url)
+                    await rag_index.refresh(self.hass, session, server_url, api_key)
                 except Exception:
                     enable_rag = False
             else:
@@ -440,139 +440,18 @@ class LemonadeConversationEntity(
                         err_text = await resp.text()
                         raise HomeAssistantError(f"LLM error: {err_text}")
 
-                    # Stream SSE: parse inline, feed text deltas, execute tool calls
+                    # Parse stream and harvest tool calls
                     harvested_tcs: list[dict[str, Any]] = []
-                    tc_accum: dict[int, dict[str, Any]] = {}
-                    in_thinking = False
-                    thinking_tag_buffer = ""
-                    content_buf = ""
+                    async for delta in self._parse_sse_stream(resp, chat_log):
+                        if "tool_calls" in delta:
+                            for tc in delta["tool_calls"]:
+                                harvested_tcs.append({
+                                    "id": tc["id"],
+                                    "name": tc["function"]["name"],
+                                    "args": tc["function"]["arguments"],
+                                })
 
-                    async for raw_line in resp.content:
-                        if not raw_line:
-                            continue
-                        line = raw_line.decode("utf-8").strip()
-
-                        # Ollama: complete JSON per line
-                        if line.startswith("{"):
-                            try:
-                                data = json.loads(line)
-                            except ValueError:
-                                continue
-                            if data.get("done"):
-                                break
-                            msg = data.get("message", {})
-                            line_data: dict[str, Any] = {}
-                            if msg.get("content"):
-                                line_data["content"] = msg["content"]
-                            if msg.get("tool_calls"):
-                                line_data["tool_calls"] = msg["tool_calls"]
-                            if not line_data:
-                                continue
-
-                        # OpenAI SSE format
-                        elif line.startswith("data: "):
-                            if line == "data: [DONE]":
-                                break
-                            try:
-                                data = json.loads(line[6:])
-                            except ValueError:
-                                continue
-                            choice = data.get("choices", [{}])[0]
-                            line_data = choice.get("delta", {})
-                            if not line_data:
-                                continue
-                        else:
-                            continue
-
-                        raw_content = line_data.get("content") or ""
-                        if raw_content:
-                            content_buf += raw_content
-
-                            if not in_thinking and "<think>" not in content_buf and "<|thought|>" not in content_buf:
-                                await chat_log.async_add_delta_content_stream(
-                                    self.entity_id,
-                                    [{"content": content_buf}],
-                                )
-                                content_buf = ""
-                            else:
-                                while content_buf:
-                                    if in_thinking:
-                                        end_tag = "</think>" if thinking_tag_buffer == "<think>" else "<|/thought|>"
-                                        end_idx = content_buf.find(end_tag)
-                                        if end_idx == -1:
-                                            break
-                                        content_buf = content_buf[end_idx + len(end_tag):]
-                                        in_thinking = False
-                                        thinking_tag_buffer = ""
-                                        continue
-
-                                    think_idx = content_buf.find("<think>")
-                                    alt_idx = content_buf.find("<|thought|>")
-                                    candidates = [idx for idx in (think_idx, alt_idx) if idx != -1]
-                                    if not candidates:
-                                        if content_buf:
-                                            await chat_log.async_add_delta_content_stream(
-                                                self.entity_id,
-                                                [{"content": content_buf}],
-                                            )
-                                        content_buf = ""
-                                        break
-
-                                    next_idx = min(candidates)
-                                    if next_idx > 0:
-                                        await chat_log.async_add_delta_content_stream(
-                                            self.entity_id,
-                                            [{"content": content_buf[:next_idx]}],
-                                        )
-
-                                    if think_idx != -1 and think_idx == next_idx:
-                                        thinking_tag_buffer = "<think>"
-                                        content_buf = content_buf[next_idx + len("<think>"):]
-                                    else:
-                                        thinking_tag_buffer = "<|thought|>"
-                                        content_buf = content_buf[next_idx + len("<|thought|>"):]
-                                    in_thinking = True
-
-                        tc_field = line_data.get("thinking_content") or ""
-                        if tc_field:
-                            await chat_log.async_add_delta_content_stream(
-                                self.entity_id,
-                                [{"thinking_content": tc_field}],
-                            )
-
-                        for tc_delta in line_data.get("tool_calls") or []:
-                            idx = tc_delta.get("index", 0)
-                            if idx not in tc_accum:
-                                tc_accum[idx] = {}
-                            entry = tc_accum[idx]
-                            if "id" in tc_delta:
-                                entry["id"] = tc_delta["id"]
-                            func = tc_delta.get("function", {})
-                            if "name" in func:
-                                entry["name"] = func["name"]
-                            if "arguments" in func:
-                                entry["args_str"] = entry.get("args_str", "") + func["arguments"]
-
-                    if content_buf and not in_thinking:
-                        await chat_log.async_add_delta_content_stream(
-                            self.entity_id,
-                            [{"content": content_buf}],
-                        )
-
-                    # Harvest accumulated tool calls
-                    for idx in sorted(tc_accum):
-                        tc = tc_accum[idx]
-                        if "id" in tc and "name" in tc and "args_str" in tc:
-                            try:
-                                args = json.loads(tc["args_str"])
-                            except (json.JSONDecodeError, ValueError):
-                                args = {}
-                            harvested_tcs.append({
-                                "id": tc["id"],
-                                "name": tc["name"],
-                                "args": args,
-                            })
-
+                    # Execute harvested tool calls
                     if harvested_tcs:
                         for tc in harvested_tcs:
                             await chat_log.async_call_tool(
@@ -583,7 +462,7 @@ class LemonadeConversationEntity(
                             )
                         continue  # tool results will flow next iteration
 
-                    # No tool calls in the stream – final text response
+                    # No tool calls – final text response
                     break
 
             except aiohttp.ClientError as err:
@@ -619,7 +498,7 @@ class LemonadeConversationEntity(
                             content=content_text,
                             thinking_content=thinking_content,
                             tool_calls=tc_list,
-                        )
+                        ),
                     )
                     for tc in message["tool_calls"]:
                         args = tc["function"]["arguments"]
@@ -638,7 +517,7 @@ class LemonadeConversationEntity(
                         agent_id=self.entity_id,
                         content=content_text,
                         thinking_content=thinking_content,
-                    )
+                    ),
                 )
                 break
 
