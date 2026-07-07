@@ -370,23 +370,11 @@ class LemonadeConversationEntity(
         if content_buf and not in_thinking:
             yield {"content": content_buf}
 
-        # Flush accumulated tool calls – yield AssistantContentDeltaDict format
-        for idx in sorted(tc_accum):
-            tc = tc_accum[idx]
-            if "id" in tc and "name" in tc and "args_str" in tc:
-                try:
-                    args = _json.loads(tc["args_str"])
-                except (_json.JSONDecodeError, ValueError):
-                    args = {}
-                yield {
-                    "tool_calls": [
-                        {
-                            "id": tc["id"],
-                            "type": "function",
-                            "function": {"name": tc["name"], "arguments": args},
-                        }
-                    ]
-                }
+        # Store accumulated tool calls for later retrieval by the caller.
+        # Must NOT yield them here because HA's async_add_delta_content_stream
+        # (chat_log.py:532) expects tool_calls entries to have an '.external'
+        # attribute, not be plain dicts.
+        self._tc_accum = tc_accum
 
     # ------------------------------------------------------------------ #
     #  Non-streaming fallback                                              #
@@ -485,14 +473,26 @@ class LemonadeConversationEntity(
                         self._iter_sse_deltas(resp),
                     ):
                         _LOGGER.debug("Chat log received delta: %s", delta)
-                        # delta is AssistantContent, check tool_calls attribute
-                        if delta.tool_calls:
-                            for tc in delta.tool_calls:
-                                harvested_tcs.append({
-                                    "id": tc.id,
-                                    "name": tc.tool_name,
-                                    "args": tc.tool_args,
-                                })
+
+                    # Collect tool calls accumulated by _iter_sse_deltas.
+                    # They are NOT yielded through the delta stream because HA's
+                    # async_add_delta_content_stream expects tool calls as objects
+                    # with an .external attribute, not plain dicts.
+                    tc_accum = getattr(self, "_tc_accum", {})
+                    for idx in sorted(tc_accum):
+                        tc = tc_accum[idx]
+                        if "id" in tc and "name" in tc and "args_str" in tc:
+                            try:
+                                args = json.loads(tc["args_str"])
+                            except (json.JSONDecodeError, ValueError):
+                                args = {}
+                            harvested_tcs.append({
+                                "id": tc["id"],
+                                "name": tc["name"],
+                                "args": args,
+                            })
+                    if "_tc_accum" in self.__dict__:
+                        del self._tc_accum
 
                     _LOGGER.debug("Harvested tool calls: %s", harvested_tcs)
 
