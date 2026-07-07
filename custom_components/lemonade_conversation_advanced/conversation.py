@@ -455,9 +455,11 @@ class LemonadeConversationEntity(
                     try:
                         relevant = await rag_index.query(session, user_prompt, server_url, top_k=rag_top_k)
                         if relevant:
-                            entity_context = "Relevant entities for this request:\n"
+                            entity_context = "Current states of relevant entities for this request:\n"
                             for e in relevant:
-                                entity_context += f"- {e['entity_id']} ({e['domain']}) in {e['area'] or 'unassigned'}: {e['name']}\n"
+                                state_obj = self.hass.states.get(e["entity_id"])
+                                state_str = state_obj.state if state_obj else "unknown"
+                                entity_context += f"- {e['entity_id']} (domain: {e['domain']}, state: {state_str}) in {e['area'] or 'unassigned'}: {e['name']}\n"
                             chat_log.async_add_system_content(entity_context)
                     except Exception:
                         pass
