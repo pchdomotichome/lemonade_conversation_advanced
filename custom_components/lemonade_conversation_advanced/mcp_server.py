@@ -177,8 +177,13 @@ class MCPServer:
                         "✅ Custom tools initialized for search provider: %s",
                         search_provider,
                     )
+                except ImportError:
+                    _LOGGER.warning(
+                        "custom_tools.py not found — search disabled. "
+                        "Create custom_components/lemonade_conversation_advanced/custom_tools.py to enable."
+                    )
                 except Exception as e:
-                    _LOGGER.error(f"Failed to initialize custom tools: {e}")
+                    _LOGGER.error("Failed to initialize custom tools: %s", e)
 
             _LOGGER.info(
                 "✅ MCP server started successfully on http://0.0.0.0:%d", self.port
