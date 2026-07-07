@@ -16,6 +16,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from voluptuous_openapi import convert
+from homeassistant.helpers.llm import ToolInput
 
 from .const import DOMAIN
 from .entity import LemonadeBaseEntity
@@ -358,7 +359,7 @@ class LemonadeConversationEntity(
         if content_buf and not in_thinking:
             yield {"content": content_buf}
 
-        # Flush accumulated tool calls
+        # Flush accumulated tool calls – yield ToolInput objects, not dicts
         for idx in sorted(tc_accum):
             tc = tc_accum[idx]
             if "id" in tc and "name" in tc and "args_str" in tc:
@@ -366,15 +367,11 @@ class LemonadeConversationEntity(
                     args = _json.loads(tc["args_str"])
                 except (_json.JSONDecodeError, ValueError):
                     args = {}
-                yield {
-                    "tool_calls": [
-                        {
-                            "id": tc["id"],
-                            "type": "function",
-                            "function": {"name": tc["name"], "arguments": args},
-                        }
-                    ]
-                }
+                yield ToolInput(
+                    tool_name=tc["name"],
+                    tool_args=args,
+                    id=tc["id"],
+                )
 
     # ------------------------------------------------------------------ #
     #  Non-streaming fallback                                              #
