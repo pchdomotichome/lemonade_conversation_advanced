@@ -108,7 +108,18 @@ class LemonadeConversationEntity(
         except conversation.ConverseError as err:
             return err.as_conversation_result()
 
-        await self._async_handle_chat_log(chat_log)
+        try:
+            await self._async_handle_chat_log(chat_log)
+        except HomeAssistantError:
+            raise
+        except Exception as err:
+            _LOGGER.exception("Chat handling failed")
+            chat_log.async_add_assistant_content_without_tools(
+                conversation.AssistantContent(
+                    agent_id=self.entity_id,
+                    content=f"An unexpected error occurred: {err}",
+                )
+            )
 
         return conversation.async_get_result_from_chat_log(user_input, chat_log)
 
@@ -373,7 +384,6 @@ class LemonadeConversationEntity(
                             "id": tc["id"],
                             "type": "function",
                             "function": {"name": tc["name"], "arguments": args},
-                            "external": {"name": tc["name"], "arguments": args},
                         }
                     ]
                 }
@@ -489,12 +499,28 @@ class LemonadeConversationEntity(
                     # Execute harvested tool calls
                     if harvested_tcs:
                         for tc in harvested_tcs:
-                            await chat_log.async_call_tool(
-                                tool_name=tc["name"],
-                                tool_args=tc["args"],
-                                tool_call_id=tc["id"],
-                                agent_id=self.entity_id,
-                            )
+                            try:
+                                await chat_log.async_call_tool(
+                                    tool_name=tc["name"],
+                                    tool_args=tc["args"],
+                                    tool_call_id=tc["id"],
+                                    agent_id=self.entity_id,
+                                )
+                            except Exception as err:
+                                _LOGGER.warning("Tool call failed: %s - %s", tc["name"], err)
+                                # Inject tool result so chat_log stays consistent
+                                # and the LLM can retry with a valid tool
+                                error_result = {"error": f"Tool '{tc['name']}' is not available: {err}"}
+                                try:
+                                    chat_log.content.append(
+                                        conversation.ToolResultContent(
+                                            agent_id=self.entity_id,
+                                            tool_call_id=tc["id"],
+                                            tool_result=error_result,
+                                        )
+                                    )
+                                except Exception:
+                                    _LOGGER.exception("Failed to inject tool result")
                         continue  # tool results will flow next iteration
 
                     # No tool calls – final text response
@@ -541,12 +567,26 @@ class LemonadeConversationEntity(
                         args = tc["function"]["arguments"]
                         if not isinstance(args, dict):
                             args = json.loads(args)
-                        await chat_log.async_call_tool(
-                            tool_name=tc["function"]["name"],
-                            tool_args=args,
-                            tool_call_id=tc["id"],
-                            agent_id=self.entity_id,
-                        )
+                        try:
+                            await chat_log.async_call_tool(
+                                tool_name=tc["function"]["name"],
+                                tool_args=args,
+                                tool_call_id=tc["id"],
+                                agent_id=self.entity_id,
+                            )
+                        except Exception as err:
+                            _LOGGER.warning("Tool call failed (non-streaming): %s - %s", tc["function"]["name"], err)
+                            error_result = {"error": f"Tool '{tc['function']['name']}' is not available: {err}"}
+                            try:
+                                chat_log.content.append(
+                                    conversation.ToolResultContent(
+                                        agent_id=self.entity_id,
+                                        tool_call_id=tc["id"],
+                                        tool_result=error_result,
+                                    )
+                                )
+                            except Exception:
+                                _LOGGER.exception("Failed to inject tool result")
                     continue
 
                 chat_log.async_add_assistant_content_without_tools(
