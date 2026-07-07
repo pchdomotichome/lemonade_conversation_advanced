@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import AsyncGenerator
 from typing import Any, Literal, override
@@ -20,6 +21,8 @@ from .const import DOMAIN
 from .entity import LemonadeBaseEntity
 from .llm_tools import async_get_tools as local_async_get_tools
 from .rag import RAGIndex
+
+_LOGGER = logging.getLogger(__name__)
 
 # Regex patterns for thinking/reasoning tags embedded in content
 _THINKING_PATTERNS = [
@@ -246,7 +249,9 @@ class LemonadeConversationEntity(
         # for Lemonade Server which may send non-chunked responses
         try:
             text = await response.text()
-        except Exception:
+            _LOGGER.debug("Raw response text (first 500 chars): %s", text[:500])
+        except Exception as e:
+            _LOGGER.error("Failed to read response text: %s", e)
             # Fallback to reading in chunks if full text fails
             chunks = []
             async for chunk in response.content.iter_chunked(4096):
@@ -262,10 +267,12 @@ class LemonadeConversationEntity(
             # OpenAI SSE format: "data: {...}" or "data: [DONE]"
             if line.startswith("data: "):
                 if line == "data: [DONE]":
+                    _LOGGER.debug("Got SSE [DONE]")
                     break
                 try:
                     data = _json.loads(line[6:])
-                except ValueError:
+                except ValueError as e:
+                    _LOGGER.warning("Failed to parse SSE line: %s", e)
                     continue
                 choice = data.get("choices", [{}])[0]
                 delta = choice.get("delta", {})
@@ -273,16 +280,24 @@ class LemonadeConversationEntity(
             elif line.startswith("{"):
                 try:
                     data = _json.loads(line)
-                except ValueError:
+                except ValueError as e:
+                    _LOGGER.warning("Failed to parse JSON line: %s", e)
                     continue
                 if data.get("done"):
+                    _LOGGER.debug("Got Ollama done marker")
                     break
                 delta = data.get("message", {})
+                # Ollama uses "content" at top level when streaming
+                if "content" in data and not delta:
+                    delta = {"content": data["content"]}
             else:
+                _LOGGER.debug("Unknown line format: %s", line[:100])
                 continue
 
             if not delta:
                 continue
+
+            _LOGGER.debug("Parsed delta: %s", delta)
 
             raw_content = delta.get("content") or ""
             if raw_content:
@@ -380,8 +395,10 @@ class LemonadeConversationEntity(
         ) as resp:
             if resp.status >= 400:
                 text = await resp.text()
+                _LOGGER.error("Non-streaming LLM error: %s", text)
                 raise HomeAssistantError(f"LLM error: {text}")
             data = await resp.json()
+            _LOGGER.debug("Non-streaming response: %s", data)
             return data["choices"][0]["message"]
 
     # ------------------------------------------------------------------ #
@@ -401,6 +418,8 @@ class LemonadeConversationEntity(
         api_url = f"{server_url}/v1/chat/completions"
         tools = self._get_tools(chat_log)
         max_iterations = 5
+
+        _LOGGER.debug("Starting chat with server_url=%s, model=%s", server_url, self.subentry.data.get("model_name"))
 
         # RAG: semantic entity retrieval per user prompt
         options = self.subentry.data
@@ -430,6 +449,7 @@ class LemonadeConversationEntity(
                         pass
 
         for iteration in range(max_iterations):
+            _LOGGER.debug("Chat iteration %d", iteration)
             messages = self._build_messages(chat_log)
             payload = self._build_payload(messages, tools, stream=True)
 
@@ -443,11 +463,13 @@ class LemonadeConversationEntity(
                 ) as resp:
                     if resp.status >= 400:
                         err_text = await resp.text()
+                        _LOGGER.error("Streaming LLM error (status %d): %s", resp.status, err_text)
                         raise HomeAssistantError(f"LLM error: {err_text}")
 
                     # Parse stream and process deltas
                     harvested_tcs: list[dict[str, Any]] = []
                     async for delta in self._parse_sse_stream(resp, chat_log):
+                        _LOGGER.debug("Got delta: %s", delta)
                         if "content" in delta or "thinking_content" in delta:
                             await chat_log.async_add_delta_content_stream(
                                 self.entity_id,
@@ -460,6 +482,8 @@ class LemonadeConversationEntity(
                                     "name": tc["function"]["name"],
                                     "args": tc["function"]["arguments"],
                                 })
+
+                    _LOGGER.debug("Harvested tool calls: %s", harvested_tcs)
 
                     # Execute harvested tool calls
                     if harvested_tcs:
@@ -476,6 +500,7 @@ class LemonadeConversationEntity(
                     break
 
             except aiohttp.ClientError as err:
+                _LOGGER.error("Streaming connection error: %s", err)
                 # Timeout or network error – retry once with non-streaming
                 try:
                     payload["stream"] = False
@@ -532,4 +557,5 @@ class LemonadeConversationEntity(
                 break
 
         else:
+            _LOGGER.error("Max tool calling iterations reached")
             raise HomeAssistantError("Max tool calling iterations reached")
