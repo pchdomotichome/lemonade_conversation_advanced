@@ -359,7 +359,7 @@ class LemonadeConversationEntity(
         if content_buf and not in_thinking:
             yield {"content": content_buf}
 
-        # Flush accumulated tool calls – yield ToolInput objects, not dicts
+        # Flush accumulated tool calls – yield AssistantContentDeltaDict format
         for idx in sorted(tc_accum):
             tc = tc_accum[idx]
             if "id" in tc and "name" in tc and "args_str" in tc:
@@ -367,11 +367,16 @@ class LemonadeConversationEntity(
                     args = _json.loads(tc["args_str"])
                 except (_json.JSONDecodeError, ValueError):
                     args = {}
-                yield ToolInput(
-                    tool_name=tc["name"],
-                    tool_args=args,
-                    id=tc["id"],
-                )
+                yield {
+                    "tool_calls": [
+                        {
+                            "id": tc["id"],
+                            "type": "function",
+                            "function": {"name": tc["name"], "arguments": args},
+                            "external": {"name": tc["name"], "arguments": args},
+                        }
+                    ]
+                }
 
     # ------------------------------------------------------------------ #
     #  Non-streaming fallback                                              #
