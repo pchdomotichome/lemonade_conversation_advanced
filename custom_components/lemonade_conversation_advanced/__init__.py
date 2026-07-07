@@ -18,6 +18,14 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.CONVERSATION, Platform.AI_TASK]
 
 
+def get_system_entry(hass: HomeAssistant) -> ConfigEntry | None:
+    """Return the system config entry for this domain, or None."""
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.source == "system":
+            return entry
+    return None
+
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the Lemonade Conversation Advanced integration."""
     hass.data.setdefault(DOMAIN, {})
