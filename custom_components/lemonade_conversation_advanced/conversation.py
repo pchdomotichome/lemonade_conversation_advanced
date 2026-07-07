@@ -23,7 +23,7 @@ from .rag import RAGIndex
 
 # Regex patterns for thinking/reasoning tags embedded in content
 _THINKING_PATTERNS = [
-    re.compile(r"nk(.*?)k", re.DOTALL | re.IGNORECASE),
+    re.compile(r"<nik(.*?)k>", re.DOTALL | re.IGNORECASE),
     re.compile(r"<\|thought\|>(.*?)<\|/thought\|>", re.DOTALL | re.IGNORECASE),
 ]
 
@@ -217,6 +217,8 @@ class LemonadeConversationEntity(
                 thinking_parts.append(match.group(1))
             cleaned = pat.sub("", cleaned)
         cleaned = re.sub(r"\n\s*\n", "\n\n", cleaned).strip()
+        # Remove empty thinking tags that may remain
+        cleaned = re.sub(r"<nik[^>]*>|</nik>", "", cleaned, flags=re.IGNORECASE)
         return cleaned, "\n".join(thinking_parts)
 
     # ------------------------------------------------------------------ #
@@ -286,23 +288,25 @@ class LemonadeConversationEntity(
             if raw_content:
                 content_buf += raw_content
 
-                # Handle thinking tags
+                # Handle thinking tags - stream content in real-time
                 while content_buf:
                     if in_thinking:
-                        end_tag = "k" if thinking_tag_buffer == "nk" else "<|/thought|>"
+                        end_tag = "</nik>" if thinking_tag_buffer == "<nik" else "<|/thought|>"
                         end_idx = content_buf.find(end_tag)
                         if end_idx == -1:
                             break
+                        thinking_tag_buffer = ""
                         content_buf = content_buf[end_idx + len(end_tag):]
                         in_thinking = False
-                        thinking_tag_buffer = ""
                         continue
 
-                    think_idx = content_buf.find("nk")
+                    think_idx = content_buf.find("<nik")
                     alt_idx = content_buf.find("<|thought|>")
                     candidates = [idx for idx in (think_idx, alt_idx) if idx != -1]
                     if not candidates:
-                        yield {"content": content_buf}
+                        # Stream out available content
+                        if content_buf:
+                            yield {"content": content_buf}
                         content_buf = ""
                         break
 
@@ -311,8 +315,8 @@ class LemonadeConversationEntity(
                         yield {"content": content_buf[:next_idx]}
 
                     if think_idx != -1 and think_idx == next_idx:
-                        thinking_tag_buffer = "nk"
-                        content_buf = content_buf[next_idx + 2:]
+                        thinking_tag_buffer = "<nik"
+                        content_buf = content_buf[next_idx + 4:]  # len("<nik") = 4
                     else:
                         thinking_tag_buffer = "<|thought|>"
                         content_buf = content_buf[next_idx + len("<|thought|>"):]
@@ -335,6 +339,7 @@ class LemonadeConversationEntity(
                 if "arguments" in func:
                     entry["args_str"] = entry.get("args_str", "") + func["arguments"]
 
+        # Flush remaining content buffer
         if content_buf and not in_thinking:
             yield {"content": content_buf}
 
@@ -440,9 +445,14 @@ class LemonadeConversationEntity(
                         err_text = await resp.text()
                         raise HomeAssistantError(f"LLM error: {err_text}")
 
-                    # Parse stream and harvest tool calls
+                    # Parse stream and process deltas
                     harvested_tcs: list[dict[str, Any]] = []
                     async for delta in self._parse_sse_stream(resp, chat_log):
+                        if "content" in delta or "thinking_content" in delta:
+                            await chat_log.async_add_delta_content_stream(
+                                self.entity_id,
+                                [delta],
+                            )
                         if "tool_calls" in delta:
                             for tc in delta["tool_calls"]:
                                 harvested_tcs.append({
