@@ -547,20 +547,13 @@ class LemonadeConversationEntity(
                     thinking_content = thinking or None
 
                 if message.get("tool_calls"):
-                    tc_list = [
-                        conversation.ToolCall(
-                            id=tc["id"],
-                            name=tc["function"]["name"],
-                            arguments=tc["function"]["arguments"] if isinstance(tc["function"]["arguments"], dict) else json.loads(tc["function"]["arguments"]),
-                        )
-                        for tc in message["tool_calls"]
-                    ]
-                    chat_log.async_add_assistant_content(
+                    # Add content without tool_calls (ToolCall class doesn't exist
+                    # in this HA version; async_call_tool handles registry internally)
+                    chat_log.async_add_assistant_content_without_tools(
                         conversation.AssistantContent(
                             agent_id=self.entity_id,
                             content=content_text,
                             thinking_content=thinking_content,
-                            tool_calls=tc_list,
                         ),
                     )
                     for tc in message["tool_calls"]:
