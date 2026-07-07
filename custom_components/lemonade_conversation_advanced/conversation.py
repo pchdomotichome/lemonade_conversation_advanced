@@ -473,12 +473,13 @@ class LemonadeConversationEntity(
                         self._iter_sse_deltas(resp),
                     ):
                         _LOGGER.debug("Chat log received delta: %s", delta)
-                        if "tool_calls" in delta:
-                            for tc in delta["tool_calls"]:
+                        # delta is AssistantContent, check tool_calls attribute
+                        if delta.tool_calls:
+                            for tc in delta.tool_calls:
                                 harvested_tcs.append({
-                                    "id": tc["id"],
-                                    "name": tc["function"]["name"],
-                                    "args": tc["function"]["arguments"],
+                                    "id": tc.id,
+                                    "name": tc.tool_name,
+                                    "args": tc.tool_args,
                                 })
 
                     _LOGGER.debug("Harvested tool calls: %s", harvested_tcs)
