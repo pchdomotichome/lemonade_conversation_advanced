@@ -225,18 +225,16 @@ class LemonadeConversationEntity(
         return cleaned, "\n".join(thinking_parts)
 
     # ------------------------------------------------------------------ #
-    #  SSE streaming parser                                                #
+    #  SSE streaming parser - returns async generator                      #
     # ------------------------------------------------------------------ #
 
-    async def _parse_sse_stream(
+    async def _iter_sse_deltas(
         self,
         response: aiohttp.ClientResponse,
-        chat_log: conversation.ChatLog,
     ) -> AsyncGenerator[dict[str, Any], None]:
-        """Parse an SSE stream into accumulated deltas.
+        """Parse an SSE stream into OpenAI-format deltas.
 
-        Yields ``AssistantContentDeltaDict``-compatible dicts.  Content is
-        buffered to detect ``<think>`` tags that span multiple chunks.
+        Yields AssistantContentDeltaDict-compatible dicts.
         """
         import json as _json
 
@@ -468,20 +466,13 @@ class LemonadeConversationEntity(
                         _LOGGER.error("Streaming LLM error (status %d): %s", resp.status, err_text)
                         raise HomeAssistantError(f"LLM error: {err_text}")
 
-                    # Parse stream and process deltas
+                    # Stream deltas to chat_log using async for (HA API expects async generator)
                     harvested_tcs: list[dict[str, Any]] = []
-                    async for delta in self._parse_sse_stream(resp, chat_log):
-                        _LOGGER.debug("Got delta: %s", delta)
-                        # Stream content and thinking deltas
-                        if "content" in delta or "thinking_content" in delta or "reasoning_content" in delta:
-                            # Normalize: rename reasoning_content -> thinking_content for HA
-                            normalized_delta = dict(delta)
-                            if "reasoning_content" in normalized_delta and "thinking_content" not in normalized_delta:
-                                normalized_delta["thinking_content"] = normalized_delta.pop("reasoning_content")
-                            await chat_log.async_add_delta_content_stream(
-                                self.entity_id,
-                                [normalized_delta],
-                            )
+                    async for delta in chat_log.async_add_delta_content_stream(
+                        self.entity_id,
+                        self._iter_sse_deltas(resp),
+                    ):
+                        _LOGGER.debug("Chat log received delta: %s", delta)
                         if "tool_calls" in delta:
                             for tc in delta["tool_calls"]:
                                 harvested_tcs.append({
@@ -510,7 +501,8 @@ class LemonadeConversationEntity(
                 _LOGGER.error("Streaming connection error: %s", err)
                 # Timeout or network error – retry once with non-streaming
                 try:
-                    payload["stream"] = False
+                    messages = self._build_messages(chat_log)
+                    payload = self._build_payload(messages, tools, stream=False)
                     message = await self._call_api_non_streaming(session, payload, headers)
                 except (aiohttp.ClientError, HomeAssistantError) as retry_err:
                     raise HomeAssistantError(
