@@ -431,19 +431,20 @@ class LemonadeConversationEntity(
         server_url = self.entry.data.get("server_url", "")
         api_url = f"{server_url}/v1/chat/completions"
         tools = self._get_tools(chat_log)
-        max_iterations = 5
-
         _LOGGER.debug("Starting chat with server_url=%s, model=%s", server_url, self.subentry.data.get("model_name"))
 
         # RAG: local keyword-based entity retrieval per user prompt
         options = self.subentry.data
+        max_iterations = options.get("max_iterations", 10)
         enable_rag = options.get("enable_rag", True)
         rag_top_k = options.get("rag_top_k", 12)
         if enable_rag and server_url:
-            cache_dir = f"{self.hass.config.config_dir}/lemonade_rag_cache"
-            api_key = self.entry.data.get("api_key", "")
-            rag_index = RAGIndex(cache_dir, api_key)
-            await rag_index.load()
+            rag_index = self.hass.data[DOMAIN].get("rag_index")
+            if rag_index is None:
+                cache_dir = f"{self.hass.config.config_dir}/lemonade_rag_cache"
+                rag_index = RAGIndex(cache_dir)
+                await rag_index.load()
+                self.hass.data[DOMAIN]["rag_index"] = rag_index
             if not rag_index._entries:
                 try:
                     await rag_index.refresh(self.hass)
