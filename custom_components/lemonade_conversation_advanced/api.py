@@ -46,6 +46,7 @@ class LemonadeAPIClient:
         *,
         request_timeout: float = 120.0,
         connect_timeout: float = 15.0,
+        first_delta_timeout: float = 8.0,
         max_retries: int = 2,
         retry_backoff: float = 2.0,
     ) -> None:
@@ -54,6 +55,7 @@ class LemonadeAPIClient:
         self._api_key = api_key
         self._request_timeout = request_timeout
         self._connect_timeout = connect_timeout
+        self._first_delta_timeout = first_delta_timeout
         self._max_retries = max_retries
         self._retry_backoff = retry_backoff
         self._session: aiohttp.ClientSession | None = None
@@ -211,7 +213,37 @@ class LemonadeAPIClient:
                         "Streaming connection established (attempt %d)",
                         attempt + 1,
                     )
-                    async for delta in self._iter_sse(resp):
+
+                    # Enforce first-delta timeout (TTFT guard):
+                    # if the model takes too long to start responding,
+                    # abandon streaming and let the caller fall back to
+                    # non-streaming (which is often faster).
+                    sse = self._iter_sse(resp)
+                    try:
+                        first = await asyncio.wait_for(
+                            sse.__anext__(),
+                            timeout=self._first_delta_timeout,
+                        )
+                    except asyncio.TimeoutError:
+                        _LOGGER.warning(
+                            "No delta within %.1fs (TTFT timeout) — "
+                            "falling back to non-streaming",
+                            self._first_delta_timeout,
+                        )
+                        raise LemonadeConnectionError(
+                            f"No response within {self._first_delta_timeout}s"
+                        )
+                    except StopAsyncIteration:
+                        # Stream ended before yielding anything
+                        raise LemonadeConnectionError(
+                            "Stream ended without any data"
+                        )
+
+                    yielded_any = True
+                    yield first
+
+                    # Continue with the rest of the stream
+                    async for delta in sse:
                         yielded_any = True
                         yield delta
 

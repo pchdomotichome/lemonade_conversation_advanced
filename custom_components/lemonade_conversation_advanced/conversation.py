@@ -98,6 +98,7 @@ class LemonadeConversationEntity(
             api_key=self.entry.data.get("api_key", ""),
             request_timeout=self.subentry.data.get("request_timeout", 120.0),
             connect_timeout=self.subentry.data.get("connect_timeout", 15.0),
+            first_delta_timeout=self.subentry.data.get("first_delta_timeout", 8.0),
             max_retries=self.subentry.data.get("max_retries", 2),
             retry_backoff=self.subentry.data.get("retry_backoff", 2.0),
         )
