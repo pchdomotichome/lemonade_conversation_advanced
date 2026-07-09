@@ -102,11 +102,25 @@ class LemonadeConversationEntity(
             index = await index_manager.get_index()
             if index:
                 import json
+                index_json = json.dumps(index, indent=2)
+                _LOGGER.debug("IndexManager index injected (%d chars)", len(index_json))
                 chat_log.content.append(
                     conversation.SystemContent(
-                        content=f"## System Index\n\n{json.dumps(index, indent=2)}"
+                        content=f"## System Index\n\n{index_json}"
                     )
                 )
+
+        # Instruct LLM not to call GetLiveContext — states are already in context
+        chat_log.content.append(
+            conversation.SystemContent(
+                content=(
+                    "IMPORTANT: Do NOT call the 'GetLiveContext' tool. "
+                    "The current states of all relevant entities are already provided above "
+                    "in the System Index and the Current States sections. "
+                    "Answer directly using the information already in this prompt."
+                )
+            )
+        )
 
     @override
     async def _async_handle_message(
@@ -473,6 +487,7 @@ class LemonadeConversationEntity(
                                 state_obj = self.hass.states.get(e["entity_id"])
                                 state_str = state_obj.state if state_obj else "unknown"
                                 entity_context += f"- {e['entity_id']} (domain: {e['domain']}, state: {state_str}) in {e['area'] or 'unassigned'}: {e['name']}\n"
+                            _LOGGER.debug("RAG entity context injected (%d chars): %s", len(entity_context), entity_context[:200])
                             chat_log.content.append(conversation.SystemContent(content=entity_context))
                     except Exception:
                         pass

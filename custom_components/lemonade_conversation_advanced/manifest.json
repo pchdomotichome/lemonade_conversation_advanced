@@ -1,7 +1,7 @@
 {
   "domain": "lemonade_conversation_advanced",
   "name": "Lemonade Conversation Advanced",
-  "version": "0.1.0-beta.32",
+  "version": "0.1.0-beta.33",
   "config_flow": true,
   "documentation": "https://github.com/pchdomotichome/lemonade_conversation_advanced",
   "issue_tracker": "https://github.com/pchdomotichome/lemonade_conversation_advanced/issues",
