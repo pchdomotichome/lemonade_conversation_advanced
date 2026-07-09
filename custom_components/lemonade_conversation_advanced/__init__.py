@@ -52,18 +52,13 @@ class LemonadeLLMAPI(llm.API):
         """Return the instance of the API."""
         tools_result = await local_async_get_tools(self.hass, llm_context, DOMAIN)
         if tools_result is None:
-            return llm.APIInstance(
-                api=self,
-                api_prompt="Lemonade Conversation Advanced tools",
-                llm_context=llm_context,
-                tools=[],
-            )
+            tools_result = []
 
         return llm.APIInstance(
             api=self,
             api_prompt="Lemonade Conversation Advanced tools",
             llm_context=llm_context,
-            tools=tools_result.tools,
+            tools=tools_result,
         )
 
 

@@ -246,20 +246,18 @@ async def async_get_tools(
     hass: HomeAssistant,
     llm_context: llm.LLMContext,
     api_id: str,
-) -> llm.LLMTools | None:
+) -> list[llm.Tool] | None:
     """Return the tools for the LLM."""
     # Only provide tools if the API is enabled for this integration
     # The api_id will be the integration domain
     if api_id != DOMAIN:
         return None
 
-    return llm.LLMTools(
-        tools=[
-            GetEntityStateTool(),
-            TurnOnEntityTool(),
-            TurnOffEntityTool(),
-            ToggleEntityTool(),
-            SetEntityValueTool(),
-            GetEntitiesInAreaTool(),
-        ]
-    )
+    return [
+        GetEntityStateTool(),
+        TurnOnEntityTool(),
+        TurnOffEntityTool(),
+        ToggleEntityTool(),
+        SetEntityValueTool(),
+        GetEntitiesInAreaTool(),
+    ]
