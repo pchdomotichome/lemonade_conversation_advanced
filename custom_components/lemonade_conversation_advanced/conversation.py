@@ -96,6 +96,18 @@ class LemonadeConversationEntity(
             user_input.extra_system_prompt,
         )
 
+        # Inject system structure index from IndexManager
+        index_manager = self.hass.data.get(DOMAIN, {}).get("index_manager")
+        if index_manager:
+            index = await index_manager.get_index()
+            if index:
+                import json
+                chat_log.content.append(
+                    conversation.SystemContent(
+                        content=f"## System Index\n\n{json.dumps(index, indent=2)}"
+                    )
+                )
+
     @override
     async def _async_handle_message(
         self,
