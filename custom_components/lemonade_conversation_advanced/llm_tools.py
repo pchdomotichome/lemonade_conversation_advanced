@@ -234,6 +234,18 @@ class GetEntitiesInAreaTool(llm.Tool):
             if e.area_id == area_entry.id
         ]
 
+        # Fallback: include entities whose name or entity_id contains
+        # the area name (covers entities that lack an area_id in the registry)
+        area_lower = area.lower()
+        seen_ids = {e["entity_id"] for e in entities}
+        for e in entity_registry.entities.values():
+            if e.entity_id not in seen_ids:
+                entity_name = (e.name or e.original_name or "").lower()
+                if area_lower in entity_name or area_lower in e.entity_id.lower():
+                    entities.append(
+                        {"entity_id": e.entity_id, "name": e.name or e.original_name, "domain": e.domain}
+                    )
+
         return {
             "area": area_entry.name,
             "area_id": area_entry.id,
