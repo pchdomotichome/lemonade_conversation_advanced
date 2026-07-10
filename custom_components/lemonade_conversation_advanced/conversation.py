@@ -119,17 +119,33 @@ class LemonadeConversationEntity(
             user_input.extra_system_prompt,
         )
 
-        # Inject system structure index from IndexManager
+        # Inject a concise home structure summary (NOT the full index —
+        # the full index lists all entities without states, which prompts
+        # the LLM to call get_entity_state unnecessarily).
         index_manager = self.hass.data.get(DOMAIN, {}).get("index_manager")
         if index_manager:
             index = await index_manager.get_index()
             if index:
-                index_json = json.dumps(index, indent=2)
-                _LOGGER.debug("IndexManager index injected (%d chars)", len(index_json))
+                areas_list = index.get("areas", [])
+                domains_map = index.get("domains", {})
+                area_summary = "Areas: " + ", ".join(
+                    f"{a['name']} ({a['entity_count']} ent.)"
+                    for a in areas_list
+                )
+                domain_summary = "Domains: " + ", ".join(
+                    f"{d} ({c})" for d, c in domains_map.items()
+                )
+                summary = (
+                    f"## Home Structure\n{area_summary}\n{domain_summary}\n"
+                    f"(Entity states are provided separately below — "
+                    f"use those, do NOT call tools to discover entities)"
+                )
+                _LOGGER.debug(
+                    "Home structure summary injected (%d chars)",
+                    len(summary),
+                )
                 chat_log.content.append(
-                    conversation.SystemContent(
-                        content=f"## System Index\n\n{index_json}"
-                    )
+                    conversation.SystemContent(content=summary)
                 )
 
         # Instruct LLM not to call GetLiveContext — states are already in context
@@ -137,8 +153,8 @@ class LemonadeConversationEntity(
             conversation.SystemContent(
                 content=(
                     "IMPORTANT: Do NOT call the 'GetLiveContext' tool. "
-                    "The current states of all relevant entities are already provided above "
-                    "in the System Index and the Current States sections. "
+                    "The current states of all relevant entities are already provided below "
+                    "in the Current States sections. "
                     "Answer directly using the information already in this prompt."
                 )
             )
@@ -270,6 +286,17 @@ class LemonadeConversationEntity(
     #  Main handler                                                        #
     # ------------------------------------------------------------------ #
 
+    @staticmethod
+    def _find_user_content_idx(
+        chat_log: conversation.ChatLog,
+    ) -> int | None:
+        """Return the index of the LAST UserContent entry in the chat log."""
+        idx = None
+        for i, c in enumerate(chat_log.content):
+            if isinstance(c, conversation.UserContent):
+                idx = i
+        return idx
+
     async def _inject_area_entity_states(
         self,
         chat_log: conversation.ChatLog,
@@ -277,11 +304,14 @@ class LemonadeConversationEntity(
     ) -> None:
         """Inject entity states for areas mentioned in the user prompt.
 
-        This gives the LLM the entity states directly in its context so it
-        can answer without calling ``get_entities_in_area`` /
-        ``get_entity_state`` — the same approach MCP Assist uses.
+        Inserts BEFORE the user message so the LLM sees the states before
+        it reads the query — matching MCP Assist behavior.
         """
         if not user_prompt:
+            return
+
+        insert_idx = self._find_user_content_idx(chat_log)
+        if insert_idx is None:
             return
 
         area_registry = ar.async_get(self.hass)
@@ -329,12 +359,12 @@ class LemonadeConversationEntity(
             if not area_entities:
                 continue
 
-            # Build state block — limit to avoid blowing up the context
+            # Build state block
             entity_context = (
-                f"## Current states for area '{area_entry.name}'"
-                f"\n(These states are already provided — "
-                f"do NOT call get_entity_state or get_entities_in_area"
-                f" for this area)\n"
+                f"## CRITICAL - Current states for area '{area_entry.name}'"
+                f"\nThe states of ALL entities in this area are listed below."
+                f"\nUse THIS data directly. DO NOT call get_entity_state or"
+                f" get_entities_in_area for entities in this area.\n"
             )
             for entity_entry in area_entities:
                 state_obj = self.hass.states.get(entity_entry.entity_id)
@@ -355,9 +385,12 @@ class LemonadeConversationEntity(
                 area_entry.name,
                 len(entity_context),
             )
-            chat_log.content.append(
-                conversation.SystemContent(content=entity_context)
+            chat_log.content.insert(
+                insert_idx,
+                conversation.SystemContent(content=entity_context),
             )
+            # Adjust index so next insert stays before the same user message
+            insert_idx += 1
 
     async def _async_handle_chat_log(
         self,
@@ -390,7 +423,8 @@ class LemonadeConversationEntity(
         max_iterations = options.get("max_iterations", 10)
         enable_rag = options.get("enable_rag", True)
         rag_top_k = options.get("rag_top_k", 12)
-        if enable_rag and user_prompt:
+        rag_insert_idx = self._find_user_content_idx(chat_log)
+        if rag_insert_idx is not None and enable_rag and user_prompt:
             rag_index = self.hass.data[DOMAIN].get("rag_index")
             if rag_index is None:
                 cache_dir = f"{self.hass.config.config_dir}/lemonade_rag_cache"
@@ -406,7 +440,7 @@ class LemonadeConversationEntity(
                 try:
                     relevant = await rag_index.query(user_prompt, top_k=rag_top_k)
                     if relevant:
-                        entity_context = "Current states of relevant entities for this request:\n"
+                        entity_context = "Other relevant entities for this request:\n"
                         for e in relevant:
                             state_obj = self.hass.states.get(e["entity_id"])
                             state_str = state_obj.state if state_obj else "unknown"
@@ -420,11 +454,27 @@ class LemonadeConversationEntity(
                             len(entity_context),
                             entity_context[:200],
                         )
-                        chat_log.content.append(
-                            conversation.SystemContent(content=entity_context)
+                        chat_log.content.insert(
+                            rag_insert_idx,
+                            conversation.SystemContent(content=entity_context),
                         )
                 except Exception:
                     pass
+
+        # Bookend: insert a reminder AFTER the user message so the LLM
+        # re-reads the "don't call tools" instruction right after the query.
+        post_user_idx = self._find_user_content_idx(chat_log)
+        if post_user_idx is not None:
+            chat_log.content.insert(
+                post_user_idx + 1,
+                conversation.SystemContent(
+                    content=(
+                        "CRITICAL REMINDER: All necessary entity states are "
+                        "provided ABOVE. Answer using those states directly. "
+                        "Do NOT call get_entity_state or get_entities_in_area."
+                    )
+                ),
+            )
 
         for iteration in range(max_iterations):
             _LOGGER.debug("Chat iteration %d", iteration)
