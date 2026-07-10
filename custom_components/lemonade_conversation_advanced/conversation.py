@@ -12,6 +12,8 @@ from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import CONF_LLM_HASS_API, CONF_PROMPT, MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.llm import ToolInput
 from voluptuous_openapi import convert
@@ -268,6 +270,95 @@ class LemonadeConversationEntity(
     #  Main handler                                                        #
     # ------------------------------------------------------------------ #
 
+    async def _inject_area_entity_states(
+        self,
+        chat_log: conversation.ChatLog,
+        user_prompt: str,
+    ) -> None:
+        """Inject entity states for areas mentioned in the user prompt.
+
+        This gives the LLM the entity states directly in its context so it
+        can answer without calling ``get_entities_in_area`` /
+        ``get_entity_state`` — the same approach MCP Assist uses.
+        """
+        if not user_prompt:
+            return
+
+        area_registry = ar.async_get(self.hass)
+        entity_registry = er.async_get(self.hass)
+
+        prompt_lower = user_prompt.lower()
+
+        matched_areas = []
+        for area_entry in area_registry.areas.values():
+            if area_entry.name.lower() in prompt_lower:
+                matched_areas.append(area_entry)
+
+        if not matched_areas:
+            _LOGGER.debug(
+                "No area name found in prompt: %s", user_prompt[:100]
+            )
+            return
+
+        for area_entry in matched_areas:
+            # Collect entities matching this area (same logic as GetEntitiesInAreaTool)
+            area_entities = []
+            seen_ids = set()
+            area_lower = area_entry.name.lower()
+
+            for e in entity_registry.entities.values():
+                if e.area_id == area_entry.id:
+                    area_entities.append(e)
+                    seen_ids.add(e.entity_id)
+
+            for e in entity_registry.entities.values():
+                if e.entity_id in seen_ids:
+                    continue
+                name_text = (e.name or e.original_name or "").lower()
+                alias_text = " ".join(
+                    a for a in e.aliases if isinstance(a, str)
+                ).lower()
+                if (
+                    area_lower in name_text
+                    or area_lower in e.entity_id.lower()
+                    or area_lower in alias_text
+                ):
+                    area_entities.append(e)
+                    seen_ids.add(e.entity_id)
+
+            if not area_entities:
+                continue
+
+            # Build state block — limit to avoid blowing up the context
+            entity_context = (
+                f"## Current states for area '{area_entry.name}'"
+                f"\n(These states are already provided — "
+                f"do NOT call get_entity_state or get_entities_in_area"
+                f" for this area)\n"
+            )
+            for entity_entry in area_entities:
+                state_obj = self.hass.states.get(entity_entry.entity_id)
+                if state_obj is None:
+                    continue
+                friendly = (
+                    entity_entry.name
+                    or entity_entry.original_name
+                    or entity_entry.entity_id
+                )
+                entity_context += (
+                    f"- {entity_entry.entity_id} ({friendly}): {state_obj.state}\n"
+                )
+
+            _LOGGER.debug(
+                "Injected %d entity states for area '%s' (%d chars)",
+                len(area_entities),
+                area_entry.name,
+                len(entity_context),
+            )
+            chat_log.content.append(
+                conversation.SystemContent(content=entity_context)
+            )
+
     async def _async_handle_chat_log(
         self,
         chat_log: conversation.ChatLog,
@@ -282,12 +373,24 @@ class LemonadeConversationEntity(
             self.subentry.data.get("model_name"),
         )
 
+        # Extract the user prompt once before any injection so downstream
+        # code (area-injection, RAG) operates on the original user message.
+        user_prompt = ""
+        if chat_log.content:
+            for c in reversed(chat_log.content):
+                if isinstance(c, conversation.UserContent):
+                    user_prompt = c.content or ""
+                    break
+
+        # Pre-inject entity states for areas mentioned in the prompt
+        await self._inject_area_entity_states(chat_log, user_prompt)
+
         # RAG: local keyword-based entity retrieval per user prompt
         options = self.subentry.data
         max_iterations = options.get("max_iterations", 10)
         enable_rag = options.get("enable_rag", True)
         rag_top_k = options.get("rag_top_k", 12)
-        if enable_rag:
+        if enable_rag and user_prompt:
             rag_index = self.hass.data[DOMAIN].get("rag_index")
             if rag_index is None:
                 cache_dir = f"{self.hass.config.config_dir}/lemonade_rag_cache"
@@ -300,30 +403,28 @@ class LemonadeConversationEntity(
                 except Exception:
                     enable_rag = False
             else:
-                user_prompt = chat_log.content[-1].content if chat_log.content else ""
-                if user_prompt:
-                    try:
-                        relevant = await rag_index.query(user_prompt, top_k=rag_top_k)
-                        if relevant:
-                            entity_context = "Current states of relevant entities for this request:\n"
-                            for e in relevant:
-                                state_obj = self.hass.states.get(e["entity_id"])
-                                state_str = state_obj.state if state_obj else "unknown"
-                                entity_context += (
-                                    f"- {e['entity_id']} (domain: {e['domain']}, "
-                                    f"state: {state_str}) in {e['area'] or 'unassigned'}: "
-                                    f"{e['name']}\n"
-                                )
-                            _LOGGER.debug(
-                                "RAG entity context injected (%d chars): %s",
-                                len(entity_context),
-                                entity_context[:200],
+                try:
+                    relevant = await rag_index.query(user_prompt, top_k=rag_top_k)
+                    if relevant:
+                        entity_context = "Current states of relevant entities for this request:\n"
+                        for e in relevant:
+                            state_obj = self.hass.states.get(e["entity_id"])
+                            state_str = state_obj.state if state_obj else "unknown"
+                            entity_context += (
+                                f"- {e['entity_id']} (domain: {e['domain']}, "
+                                f"state: {state_str}) in {e['area'] or 'unassigned'}: "
+                                f"{e['name']}\n"
                             )
-                            chat_log.content.append(
-                                conversation.SystemContent(content=entity_context)
-                            )
-                    except Exception:
-                        pass
+                        _LOGGER.debug(
+                            "RAG entity context injected (%d chars): %s",
+                            len(entity_context),
+                            entity_context[:200],
+                        )
+                        chat_log.content.append(
+                            conversation.SystemContent(content=entity_context)
+                        )
+                except Exception:
+                    pass
 
         for iteration in range(max_iterations):
             _LOGGER.debug("Chat iteration %d", iteration)
