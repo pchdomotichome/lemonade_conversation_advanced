@@ -497,9 +497,7 @@ class LemonadeConversationEntity(
                     or entity_entry.original_name
                     or entity_entry.entity_id
                 )
-                entity_context += (
-                    f"- {entity_entry.entity_id} ({friendly}): {state_obj.state}\n"
-                )
+                entity_context += _format_entity_state(entity_entry.entity_id, friendly, state_obj)
 
             _LOGGER.debug(
                 "Injected %d entity states for area '%s'%s (%d chars)",
@@ -515,6 +513,55 @@ class LemonadeConversationEntity(
             insert_idx += 1
 
         return insert_idx
+
+    # Attribute keys that are metadata, not the entity's actual state/value.
+    _STATE_METADATA_KEYS = frozenset(
+        {
+            "friendly_name",
+            "entity_id",
+            "icon",
+            "entity_picture",
+            "device_class",
+            "supported_features",
+            "supported_color_modes",
+            "state_class",
+            "attribution",
+            "assumed_state",
+            "restored",
+            "saved_state",
+            "initial_state",
+        }
+    )
+
+    @staticmethod
+    def _format_entity_state(
+        entity_id: str,
+        friendly: str,
+        state_obj: Any,
+    ) -> str:
+        """Render an entity's state plus its useful attributes for injection.
+
+        ``state`` alone is often insufficient (e.g. a climate entity's state
+        is just the HVAC mode). Including value attributes (temperature,
+        brightness, humidity, …) lets the LLM answer directly instead of
+        calling ``get_entity_state``.
+        """
+        if state_obj is None:
+            return f"- {entity_id} ({friendly}): unknown\n"
+
+        extras: list[str] = []
+        for key, val in state_obj.attributes.items():
+            if key in LemonadeConversationEntity._STATE_METADATA_KEYS:
+                continue
+            if isinstance(val, (list, dict)):
+                continue
+            extras.append(f"{key}={val}")
+        # Keep the most relevant attributes to avoid bloating the prompt.
+        extras = extras[:8]
+
+        if extras:
+            return f"- {entity_id} ({friendly}): {state_obj.state} ({', '.join(extras)})\n"
+        return f"- {entity_id} ({friendly}): {state_obj.state}\n"
 
     @staticmethod
     def _cleanup_stale_system_content(chat_log: conversation.ChatLog) -> None:
