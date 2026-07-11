@@ -18,6 +18,7 @@ import aiohttp
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.components.homeassistant import async_should_expose
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_reg
 from homeassistant.helpers.area_registry import async_get as async_get_area_reg
 
@@ -65,6 +66,8 @@ class RAGIndex:
         area_reg = async_get_area_reg(hass)
 
         for entry in entity_reg.entities.values():
+            if not async_should_expose(hass, "conversation", entry.entity_id):
+                continue
             area_name = ""
             if entry.area_id:
                 area_obj = area_reg.async_get(entry.area_id)
@@ -83,7 +86,9 @@ class RAGIndex:
         return len(self._entries)
 
     async def query(
-        self, prompt: str, top_k: int = RAG_TOP_K
+        self, prompt: str, top_k: int = RAG_TOP_K,
+        domain_filter: str | None = None,
+        area_filter: str | None = None,
     ) -> list[dict[str, Any]]:
         if not self._entries:
             return []
@@ -94,6 +99,10 @@ class RAGIndex:
 
         results: list[tuple[int, dict]] = []
         for e in self._entries:
+            if domain_filter and e["domain"] != domain_filter:
+                continue
+            if area_filter and e["area"] and e["area"] != area_filter:
+                continue
             entity_tokens = set(e["tokens"])
             score = len(prompt_tokens & entity_tokens)
             if score >= RAG_SCORE_THRESHOLD:

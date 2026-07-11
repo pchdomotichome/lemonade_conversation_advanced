@@ -8,6 +8,7 @@ import re
 from typing import Any, Literal, override
 
 from homeassistant.components import conversation
+from homeassistant.components.homeassistant import async_should_expose
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import CONF_LLM_HASS_API, CONF_PROMPT, MATCH_ALL
 from homeassistant.core import HomeAssistant
@@ -26,6 +27,7 @@ from .api import (
 )
 from .const import DOMAIN
 from .entity import LemonadeBaseEntity
+from .prompt_analyzer import extract_prompt_intent
 from .rag import RAGIndex
 
 _LOGGER = logging.getLogger(__name__)
@@ -301,11 +303,13 @@ class LemonadeConversationEntity(
         self,
         chat_log: conversation.ChatLog,
         user_prompt: str,
+        intent: dict[str, Any] | None = None,
     ) -> None:
         """Inject entity states for areas mentioned in the user prompt.
 
         Inserts BEFORE the user message so the LLM sees the states before
-        it reads the query — matching MCP Assist behavior.
+        it reads the query. When *intent* contains a ``domain_hint``, only
+        entities matching that domain are injected.
         """
         if not user_prompt:
             return
@@ -318,6 +322,7 @@ class LemonadeConversationEntity(
         entity_registry = er.async_get(self.hass)
 
         prompt_lower = user_prompt.lower()
+        domain_hint = (intent or {}).get("domain_hint")
 
         matched_areas = []
         for area_entry in area_registry.areas.values():
@@ -331,18 +336,26 @@ class LemonadeConversationEntity(
             return
 
         for area_entry in matched_areas:
-            # Collect entities matching this area (same logic as GetEntitiesInAreaTool)
+            # Collect entities matching this area + optional domain filter
             area_entities = []
             seen_ids = set()
             area_lower = area_entry.name.lower()
 
             for e in entity_registry.entities.values():
+                if not async_should_expose(self.hass, "conversation", e.entity_id):
+                    continue
+                if domain_hint and e.domain != domain_hint:
+                    continue
                 if e.area_id == area_entry.id:
                     area_entities.append(e)
                     seen_ids.add(e.entity_id)
 
             for e in entity_registry.entities.values():
                 if e.entity_id in seen_ids:
+                    continue
+                if not async_should_expose(self.hass, "conversation", e.entity_id):
+                    continue
+                if domain_hint and e.domain != domain_hint:
                     continue
                 name_text = (e.name or e.original_name or "").lower()
                 alias_text = " ".join(
@@ -360,11 +373,11 @@ class LemonadeConversationEntity(
                 continue
 
             # Build state block
+            label = f" ({domain_hint})" if domain_hint else ""
             entity_context = (
-                f"## CRITICAL - Current states for area '{area_entry.name}'"
-                f"\nThe states of ALL entities in this area are listed below."
+                f"## Current states for area '{area_entry.name}'{label}"
                 f"\nUse THIS data directly. DO NOT call get_entity_state or"
-                f" get_entities_in_area for entities in this area.\n"
+                f" get_entities_in_area for these entities.\n"
             )
             for entity_entry in area_entities:
                 state_obj = self.hass.states.get(entity_entry.entity_id)
@@ -380,16 +393,16 @@ class LemonadeConversationEntity(
                 )
 
             _LOGGER.debug(
-                "Injected %d entity states for area '%s' (%d chars)",
+                "Injected %d entity states for area '%s'%s (%d chars)",
                 len(area_entities),
                 area_entry.name,
+                label,
                 len(entity_context),
             )
             chat_log.content.insert(
                 insert_idx,
                 conversation.SystemContent(content=entity_context),
             )
-            # Adjust index so next insert stays before the same user message
             insert_idx += 1
 
     async def _async_handle_chat_log(
@@ -415,8 +428,19 @@ class LemonadeConversationEntity(
                     user_prompt = c.content or ""
                     break
 
+        # Analyse the prompt for domain / action hints
+        intent = extract_prompt_intent(user_prompt)
+        domain_hint = intent["domain_hint"]
+        action_hint = intent["action_hint"]
+        if domain_hint or action_hint:
+            _LOGGER.debug(
+                "Prompt intent: domain=%s action=%s",
+                domain_hint,
+                action_hint,
+            )
+
         # Pre-inject entity states for areas mentioned in the prompt
-        await self._inject_area_entity_states(chat_log, user_prompt)
+        await self._inject_area_entity_states(chat_log, user_prompt, intent)
 
         # RAG: local keyword-based entity retrieval per user prompt
         options = self.subentry.data
@@ -438,7 +462,12 @@ class LemonadeConversationEntity(
                     enable_rag = False
             else:
                 try:
-                    relevant = await rag_index.query(user_prompt, top_k=rag_top_k)
+                    relevant = await rag_index.query(
+                        user_prompt,
+                        top_k=rag_top_k,
+                        domain_filter=domain_hint,
+                        area_filter=None,
+                    )
                     if relevant:
                         entity_context = "Other relevant entities for this request:\n"
                         for e in relevant:
