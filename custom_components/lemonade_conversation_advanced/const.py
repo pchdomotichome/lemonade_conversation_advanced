@@ -101,6 +101,19 @@ DEFAULT_END_WORDS = "stop, cancel, no, nope, thanks, thank you, bye, goodbye, do
 DEFAULT_CLEAN_RESPONSES = False
 DEFAULT_TIMEOUT = 30
 
+# API timeouts (can be overridden per subentry)
+CONF_REQUEST_TIMEOUT = "request_timeout"
+CONF_CONNECT_TIMEOUT = "connect_timeout"
+CONF_FIRST_DELTA_TIMEOUT = "first_delta_timeout"
+CONF_MAX_RETRIES = "max_retries"
+CONF_RETRY_BACKOFF = "retry_backoff"
+
+DEFAULT_REQUEST_TIMEOUT = 120.0
+DEFAULT_CONNECT_TIMEOUT = 15.0
+DEFAULT_FIRST_DELTA_TIMEOUT = 25.0  # Increased from 8s — local models are slow to start
+DEFAULT_MAX_RETRIES = 2
+DEFAULT_RETRY_BACKOFF = 2.0
+
 # MCP Server settings
 MCP_SERVER_NAME = "ha-entity-discovery"
 MCP_PROTOCOL_VERSION = "2024-11-05"

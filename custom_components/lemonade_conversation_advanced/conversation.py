@@ -25,7 +25,19 @@ from .api import (
     LemonadeAuthError,
     LemonadeConnectionError,
 )
-from .const import DOMAIN
+from .const import (
+    CONF_CONNECT_TIMEOUT,
+    CONF_FIRST_DELTA_TIMEOUT,
+    CONF_MAX_RETRIES,
+    CONF_REQUEST_TIMEOUT,
+    CONF_RETRY_BACKOFF,
+    DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_FIRST_DELTA_TIMEOUT,
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_REQUEST_TIMEOUT,
+    DEFAULT_RETRY_BACKOFF,
+    DOMAIN,
+)
 from .entity import LemonadeBaseEntity
 from .prompt_analyzer import extract_prompt_intent
 from .rag import RAGIndex
@@ -96,15 +108,16 @@ class LemonadeConversationEntity(
 
     def _build_client(self) -> LemonadeAPIClient:
         """Create a LemonadeAPIClient from the current config."""
+        opts = self.subentry.data
         return LemonadeAPIClient(
             hass=self.hass,
             server_url=self.entry.data.get("server_url", ""),
             api_key=self.entry.data.get("api_key", ""),
-            request_timeout=self.subentry.data.get("request_timeout", 120.0),
-            connect_timeout=self.subentry.data.get("connect_timeout", 15.0),
-            first_delta_timeout=self.subentry.data.get("first_delta_timeout", 8.0),
-            max_retries=self.subentry.data.get("max_retries", 2),
-            retry_backoff=self.subentry.data.get("retry_backoff", 2.0),
+            request_timeout=opts.get(CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT),
+            connect_timeout=opts.get(CONF_CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT),
+            first_delta_timeout=opts.get(CONF_FIRST_DELTA_TIMEOUT, DEFAULT_FIRST_DELTA_TIMEOUT),
+            max_retries=opts.get(CONF_MAX_RETRIES, DEFAULT_MAX_RETRIES),
+            retry_backoff=opts.get(CONF_RETRY_BACKOFF, DEFAULT_RETRY_BACKOFF),
         )
 
     async def _async_prepare_chat_log(

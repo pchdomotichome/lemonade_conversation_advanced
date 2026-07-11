@@ -45,8 +45,8 @@ class LemonadeAPIClient:
         api_key: str = "",
         *,
         request_timeout: float = 120.0,
-        connect_timeout: float = 15.0,
-        first_delta_timeout: float = 8.0,
+        connect_timeout: float = 30.0,
+        first_delta_timeout: float = 25.0,
         max_retries: int = 2,
         retry_backoff: float = 2.0,
     ) -> None:
