@@ -29,23 +29,50 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
-    DOMAIN,
-    CONF_SERVER_URL,
     CONF_API_KEY,
-    CONF_MODEL_NAME,
-    CONF_SYSTEM_PROMPT,
-    CONF_TEMPERATURE,
-    CONF_MAX_TOKENS,
+    CONF_CLEAN_RESPONSES,
+    CONF_CONNECT_TIMEOUT,
+    CONF_CONTROL_HA,
+    CONF_DEBUG_MODE,
+    CONF_END_WORDS,
     CONF_ENABLE_RAG,
+    CONF_FIRST_DELTA_TIMEOUT,
+    CONF_FOLLOW_UP_PHRASES,
+    CONF_LLM_HASS_API,
+    CONF_MAX_HISTORY,
+    CONF_MAX_ITERATIONS,
+    CONF_MAX_RETRIES,
+    CONF_MAX_TOKENS,
+    CONF_MODEL_NAME,
     CONF_RAG_TOP_K,
-    DEFAULT_SERVER_URL,
+    CONF_REQUEST_TIMEOUT,
+    CONF_RESPONSE_MODE,
+    CONF_RETRY_BACKOFF,
+    CONF_SERVER_URL,
+    CONF_SYSTEM_PROMPT,
+    CONF_TECHNICAL_PROMPT,
+    CONF_TEMPERATURE,
+    DEFAULT_CLEAN_RESPONSES,
+    DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_CONTROL_HA,
+    DEFAULT_DEBUG_MODE,
+    DEFAULT_END_WORDS,
+    DEFAULT_ENABLE_RAG,
+    DEFAULT_FIRST_DELTA_TIMEOUT,
+    DEFAULT_FOLLOW_UP_PHRASES,
+    DEFAULT_MAX_HISTORY,
+    DEFAULT_MAX_ITERATIONS,
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL_NAME,
+    DEFAULT_RAG_TOP_K,
+    DEFAULT_REQUEST_TIMEOUT,
+    DEFAULT_RESPONSE_MODE,
+    DEFAULT_RETRY_BACKOFF,
+    DEFAULT_SERVER_URL,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEMPERATURE,
-    DEFAULT_MAX_TOKENS,
-    CONF_LLM_HASS_API,
-    DEFAULT_ENABLE_RAG,
-    DEFAULT_RAG_TOP_K,
+    DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,11 +80,25 @@ _LOGGER = logging.getLogger(__name__)
 # Default subentry data
 DEFAULT_CONVERSATION_DATA = {
     CONF_SYSTEM_PROMPT: "You are a helpful Home Assistant voice assistant.",
+    CONF_TECHNICAL_PROMPT: "",
     CONF_TEMPERATURE: 0.7,
     CONF_MAX_TOKENS: 2048,
+    CONF_MAX_HISTORY: DEFAULT_MAX_HISTORY,
+    CONF_RESPONSE_MODE: DEFAULT_RESPONSE_MODE,
+    CONF_CLEAN_RESPONSES: DEFAULT_CLEAN_RESPONSES,
+    CONF_CONTROL_HA: DEFAULT_CONTROL_HA,
+    CONF_MAX_ITERATIONS: DEFAULT_MAX_ITERATIONS,
+    CONF_DEBUG_MODE: DEFAULT_DEBUG_MODE,
     CONF_LLM_HASS_API: None,
     CONF_ENABLE_RAG: DEFAULT_ENABLE_RAG,
     CONF_RAG_TOP_K: DEFAULT_RAG_TOP_K,
+    CONF_FOLLOW_UP_PHRASES: DEFAULT_FOLLOW_UP_PHRASES,
+    CONF_END_WORDS: DEFAULT_END_WORDS,
+    CONF_REQUEST_TIMEOUT: DEFAULT_REQUEST_TIMEOUT,
+    CONF_CONNECT_TIMEOUT: DEFAULT_CONNECT_TIMEOUT,
+    CONF_FIRST_DELTA_TIMEOUT: DEFAULT_FIRST_DELTA_TIMEOUT,
+    CONF_MAX_RETRIES: DEFAULT_MAX_RETRIES,
+    CONF_RETRY_BACKOFF: DEFAULT_RETRY_BACKOFF,
 }
 
 DEFAULT_AI_TASK_DATA = {
@@ -293,6 +334,10 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
             return self.async_abort(reason="entry_not_loaded")
 
         if user_input is not None:
+            # Normalize boolean fields from string "1"/"0" to proper bools
+            for key in (CONF_ENABLE_RAG, CONF_CONTROL_HA, CONF_DEBUG_MODE, CONF_CLEAN_RESPONSES):
+                if key in user_input:
+                    user_input[key] = user_input[key] in ("1", True, "true")
             title = user_input.get(CONF_MODEL_NAME, "Lemonade")
             if self._is_new:
                 return self.async_create_entry(
@@ -323,10 +368,16 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
         if not llm_api_options:
             llm_api_options = [{"value": "none", "label": "No LLM APIs available"}]
 
+        # Helper to convert stored bool to selector value string
+        def _bool_val(key: str, default: bool = False) -> str:
+            val = options.get(key, default)
+            return "1" if val else "0"
+
         return self.async_show_form(
             step_id="set_options",
             data_schema=vol.Schema(
                 {
+                    # ── Model & Prompts ─────────────────────────────
                     vol.Required(
                         CONF_MODEL_NAME,
                         default=options.get(CONF_MODEL_NAME),
@@ -347,6 +398,13 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                         TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
                     ),
                     vol.Optional(
+                        CONF_TECHNICAL_PROMPT,
+                        default=options.get(CONF_TECHNICAL_PROMPT, ""),
+                    ): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+                    ),
+                    # ── Response Settings ───────────────────────────
+                    vol.Optional(
                         CONF_TEMPERATURE,
                         default=options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE),
                     ): NumberSelector(
@@ -359,6 +417,69 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                         NumberSelectorConfig(min=256, max=32768, step=256, mode=NumberSelectorMode.BOX)
                     ),
                     vol.Optional(
+                        CONF_MAX_HISTORY,
+                        default=options.get(CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY),
+                    ): NumberSelector(
+                        NumberSelectorConfig(min=2, max=50, step=1, mode=NumberSelectorMode.BOX)
+                    ),
+                    vol.Optional(
+                        CONF_RESPONSE_MODE,
+                        default=options.get(CONF_RESPONSE_MODE, DEFAULT_RESPONSE_MODE),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value="none", label="None (pass-through)"),
+                                SelectOptionDict(value="default", label="Default"),
+                                SelectOptionDict(value="always", label="Always respond"),
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_CLEAN_RESPONSES,
+                        default=_bool_val(CONF_CLEAN_RESPONSES, DEFAULT_CLEAN_RESPONSES),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value="1", label="On"),
+                                SelectOptionDict(value="0", label="Off"),
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    # ── Behaviour ──────────────────────────────────
+                    vol.Optional(
+                        CONF_CONTROL_HA,
+                        default=_bool_val(CONF_CONTROL_HA, DEFAULT_CONTROL_HA),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value="1", label="On"),
+                                SelectOptionDict(value="0", label="Off"),
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_MAX_ITERATIONS,
+                        default=options.get(CONF_MAX_ITERATIONS, DEFAULT_MAX_ITERATIONS),
+                    ): NumberSelector(
+                        NumberSelectorConfig(min=1, max=50, step=1, mode=NumberSelectorMode.BOX)
+                    ),
+                    vol.Optional(
+                        CONF_DEBUG_MODE,
+                        default=_bool_val(CONF_DEBUG_MODE, DEFAULT_DEBUG_MODE),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value="1", label="On"),
+                                SelectOptionDict(value="0", label="Off"),
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    # ── Home Assistant API & RAG ───────────────────
+                    vol.Optional(
                         CONF_LLM_HASS_API,
                         default=options.get(CONF_LLM_HASS_API),
                     ): SelectSelector(
@@ -370,7 +491,7 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                     ),
                     vol.Optional(
                         CONF_ENABLE_RAG,
-                        default=options.get(CONF_ENABLE_RAG, DEFAULT_ENABLE_RAG),
+                        default=_bool_val(CONF_ENABLE_RAG, DEFAULT_ENABLE_RAG),
                     ): SelectSelector(
                         SelectSelectorConfig(
                             options=[
@@ -385,6 +506,50 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                         default=options.get(CONF_RAG_TOP_K, DEFAULT_RAG_TOP_K),
                     ): NumberSelector(
                         NumberSelectorConfig(min=1, max=50, step=1, mode=NumberSelectorMode.BOX)
+                    ),
+                    # ── Follow-up & End Phrases ────────────────────
+                    vol.Optional(
+                        CONF_FOLLOW_UP_PHRASES,
+                        default=options.get(CONF_FOLLOW_UP_PHRASES, DEFAULT_FOLLOW_UP_PHRASES),
+                    ): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+                    ),
+                    vol.Optional(
+                        CONF_END_WORDS,
+                        default=options.get(CONF_END_WORDS, DEFAULT_END_WORDS),
+                    ): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+                    ),
+                    # ── Timeouts & Retries ─────────────────────────
+                    vol.Optional(
+                        CONF_REQUEST_TIMEOUT,
+                        default=options.get(CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT),
+                    ): NumberSelector(
+                        NumberSelectorConfig(min=0, max=600, step=5, mode=NumberSelectorMode.BOX)
+                    ),
+                    vol.Optional(
+                        CONF_CONNECT_TIMEOUT,
+                        default=options.get(CONF_CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT),
+                    ): NumberSelector(
+                        NumberSelectorConfig(min=0, max=120, step=1, mode=NumberSelectorMode.BOX)
+                    ),
+                    vol.Optional(
+                        CONF_FIRST_DELTA_TIMEOUT,
+                        default=options.get(CONF_FIRST_DELTA_TIMEOUT, DEFAULT_FIRST_DELTA_TIMEOUT),
+                    ): NumberSelector(
+                        NumberSelectorConfig(min=0, max=120, step=1, mode=NumberSelectorMode.BOX)
+                    ),
+                    vol.Optional(
+                        CONF_MAX_RETRIES,
+                        default=options.get(CONF_MAX_RETRIES, DEFAULT_MAX_RETRIES),
+                    ): NumberSelector(
+                        NumberSelectorConfig(min=0, max=10, step=1, mode=NumberSelectorMode.BOX)
+                    ),
+                    vol.Optional(
+                        CONF_RETRY_BACKOFF,
+                        default=options.get(CONF_RETRY_BACKOFF, DEFAULT_RETRY_BACKOFF),
+                    ): NumberSelector(
+                        NumberSelectorConfig(min=0.0, max=30.0, step=0.5, mode=NumberSelectorMode.BOX)
                     ),
                 }
             ),

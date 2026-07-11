@@ -26,17 +26,44 @@ from .api import (
     LemonadeConnectionError,
 )
 from .const import (
+    CONF_CLEAN_RESPONSES,
     CONF_CONNECT_TIMEOUT,
+    CONF_CONTROL_HA,
+    CONF_DEBUG_MODE,
+    CONF_ENABLE_RAG,
+    CONF_END_WORDS,
     CONF_FIRST_DELTA_TIMEOUT,
+    CONF_FOLLOW_UP_PHRASES,
+    CONF_MAX_HISTORY,
+    CONF_MAX_ITERATIONS,
     CONF_MAX_RETRIES,
+    CONF_MAX_TOKENS,
+    CONF_MODEL_NAME,
+    CONF_RAG_TOP_K,
     CONF_REQUEST_TIMEOUT,
+    CONF_RESPONSE_MODE,
     CONF_RETRY_BACKOFF,
+    CONF_SYSTEM_PROMPT,
+    CONF_TECHNICAL_PROMPT,
+    CONF_TEMPERATURE,
+    DEFAULT_CLEAN_RESPONSES,
     DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_CONTROL_HA,
+    DEFAULT_DEBUG_MODE,
+    DEFAULT_ENABLE_RAG,
     DEFAULT_FIRST_DELTA_TIMEOUT,
+    DEFAULT_MAX_HISTORY,
+    DEFAULT_MAX_ITERATIONS,
     DEFAULT_MAX_RETRIES,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_RAG_TOP_K,
     DEFAULT_REQUEST_TIMEOUT,
+    DEFAULT_RESPONSE_MODE,
     DEFAULT_RETRY_BACKOFF,
+    DEFAULT_SYSTEM_PROMPT,
+    DEFAULT_TEMPERATURE,
     DOMAIN,
+    RESPONSE_MODE_INSTRUCTIONS,
 )
 from .entity import LemonadeBaseEntity
 from .prompt_analyzer import extract_prompt_intent
@@ -79,7 +106,11 @@ class LemonadeConversationEntity(
         """Initialize the agent."""
         super().__init__(entry, subentry)
         self._client: LemonadeAPIClient | None = None
-        if self.subentry.data.get(CONF_LLM_HASS_API):
+        opts = self.subentry.data
+        control_ha = opts.get(CONF_CONTROL_HA, DEFAULT_CONTROL_HA)
+        if isinstance(control_ha, str):
+            control_ha = control_ha in ("1", "true", "yes", "on")
+        if opts.get(CONF_LLM_HASS_API) and control_ha:
             self._attr_supported_features = (
                 conversation.ConversationEntityFeature.CONTROL
             )
@@ -133,6 +164,21 @@ class LemonadeConversationEntity(
             options.get(CONF_PROMPT),
             user_input.extra_system_prompt,
         )
+
+        # Append technical prompt as system content
+        technical_prompt = options.get(CONF_TECHNICAL_PROMPT, "")
+        if technical_prompt:
+            chat_log.content.append(
+                conversation.SystemContent(content=technical_prompt)
+            )
+
+        # Append response mode instructions
+        response_mode = options.get(CONF_RESPONSE_MODE, DEFAULT_RESPONSE_MODE)
+        rm_instructions = RESPONSE_MODE_INSTRUCTIONS.get(response_mode)
+        if rm_instructions:
+            chat_log.content.append(
+                conversation.SystemContent(content=rm_instructions)
+            )
 
         # Inject a concise home structure summary (NOT the full index —
         # the full index lists all entities without states, which prompts
@@ -206,15 +252,22 @@ class LemonadeConversationEntity(
     #  Helpers – build messages / payload from ChatLog                     #
     # ------------------------------------------------------------------ #
 
-    @staticmethod
-    def _build_messages(chat_log: conversation.ChatLog) -> list[dict[str, Any]]:
+    def _build_messages(
+        self,
+        chat_log: conversation.ChatLog,
+    ) -> list[dict[str, Any]]:
         """Serialise ChatLog content into OpenAI-format messages."""
-        messages: list[dict[str, Any]] = []
+        options = self.subentry.data
+        max_history = options.get(CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY)
+
+        system_messages: list[dict[str, Any]] = []
+        non_system_messages: list[dict[str, Any]] = []
+
         for content in chat_log.content:
             if isinstance(content, conversation.SystemContent):
-                messages.append({"role": "system", "content": content.content})
+                system_messages.append({"role": "system", "content": content.content})
             elif isinstance(content, conversation.UserContent):
-                messages.append({"role": "user", "content": content.content})
+                non_system_messages.append({"role": "user", "content": content.content})
             elif isinstance(content, conversation.AssistantContent):
                 msg: dict[str, Any] = {
                     "role": "assistant",
@@ -234,14 +287,19 @@ class LemonadeConversationEntity(
                         }
                         for tc in content.tool_calls
                     ]
-                messages.append(msg)
+                non_system_messages.append(msg)
             elif isinstance(content, conversation.ToolResultContent):
-                messages.append({
+                non_system_messages.append({
                     "role": "tool",
                     "tool_call_id": content.tool_call_id,
                     "content": json.dumps(content.tool_result),
                 })
-        return messages
+
+        # Trim history to last max_history turns (each "turn" is user+assistant+tools)
+        if max_history > 0 and len(non_system_messages) > max_history * 2:
+            non_system_messages = non_system_messages[-(max_history * 2):]
+
+        return system_messages + non_system_messages
 
     def _build_payload(
         self,
@@ -253,10 +311,10 @@ class LemonadeConversationEntity(
         """Build the API request payload."""
         options = self.subentry.data
         payload: dict[str, Any] = {
-            "model": options.get("model_name", ""),
+            "model": options.get(CONF_MODEL_NAME, ""),
             "messages": messages,
-            "temperature": options.get("temperature", 0.7),
-            "max_tokens": options.get("max_tokens", 2048),
+            "temperature": options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE),
+            "max_tokens": options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS),
             "stream": stream,
         }
         if tools:
@@ -418,6 +476,29 @@ class LemonadeConversationEntity(
             )
             insert_idx += 1
 
+    @staticmethod
+    def _cleanup_stale_system_content(chat_log: conversation.ChatLog) -> None:
+        """Remove stale injected SystemContent from previous turns.
+
+        _async_prepare_chat_log adds fresh system content (home structure,
+        reminders, technical prompt) at the end of chat_log each turn.
+        Area-state injections, RAG context, and CRITICAL REMINDER entries
+        from previous turns accumulate and bloat the context — strip them.
+        """
+        stale_prefixes = (
+            "## Current states for area",
+            "Other relevant entities for this request",
+            "CRITICAL REMINDER",
+        )
+        chat_log.content[:] = [
+            c
+            for c in chat_log.content
+            if not (
+                isinstance(c, conversation.SystemContent)
+                and c.content.startswith(stale_prefixes)
+            )
+        ]
+
     async def _async_handle_chat_log(
         self,
         chat_log: conversation.ChatLog,
@@ -426,10 +507,22 @@ class LemonadeConversationEntity(
         assert self._client is not None
 
         tools = self._get_tools(chat_log)
+        options = self.subentry.data
+
+        # Strip stale injected system content from previous turns
+        self._cleanup_stale_system_content(chat_log)
+
+        # Debug mode: bump logging for this handler
+        debug_mode = options.get(CONF_DEBUG_MODE, DEFAULT_DEBUG_MODE)
+        if isinstance(debug_mode, str):
+            debug_mode = debug_mode in ("1", "true", "yes", "on")
+        if debug_mode:
+            _LOGGER.setLevel(logging.DEBUG)
+
         _LOGGER.debug(
             "Starting chat with server_url=%s, model=%s",
             self._client.server_url,
-            self.subentry.data.get("model_name"),
+            options.get(CONF_MODEL_NAME),
         )
 
         # Extract the user prompt once before any injection so downstream
@@ -440,6 +533,23 @@ class LemonadeConversationEntity(
                 if isinstance(c, conversation.UserContent):
                     user_prompt = c.content or ""
                     break
+
+        # Check if user input matches an end word — short-circuit if so
+        end_words_raw = options.get(CONF_END_WORDS, "")
+        if end_words_raw and user_prompt:
+            end_words = [w.strip().lower() for w in end_words_raw.split(",") if w.strip()]
+            prompt_lower = user_prompt.strip().lower().rstrip(".!?")
+            if prompt_lower in end_words or any(
+                prompt_lower == ew for ew in end_words
+            ):
+                _LOGGER.debug("End word matched, returning brief goodbye")
+                chat_log.async_add_assistant_content_without_tools(
+                    conversation.AssistantContent(
+                        agent_id=self.entity_id,
+                        content="You're welcome! Feel free to ask if you need anything else.",
+                    )
+                )
+                return
 
         # Analyse the prompt for domain / action hints
         intent = extract_prompt_intent(user_prompt)
@@ -456,10 +566,11 @@ class LemonadeConversationEntity(
         await self._inject_area_entity_states(chat_log, user_prompt, intent)
 
         # RAG: local keyword-based entity retrieval per user prompt
-        options = self.subentry.data
-        max_iterations = options.get("max_iterations", 10)
-        enable_rag = options.get("enable_rag", True)
-        rag_top_k = options.get("rag_top_k", 12)
+        max_iterations = options.get(CONF_MAX_ITERATIONS, DEFAULT_MAX_ITERATIONS)
+        enable_rag = options.get(CONF_ENABLE_RAG, DEFAULT_ENABLE_RAG)
+        if isinstance(enable_rag, str):
+            enable_rag = enable_rag in ("1", "true", "yes", "on")
+        rag_top_k = options.get(CONF_RAG_TOP_K, DEFAULT_RAG_TOP_K)
         rag_insert_idx = self._find_user_content_idx(chat_log)
         if rag_insert_idx is not None and enable_rag and user_prompt:
             rag_index = self.hass.data[DOMAIN].get("rag_index")
