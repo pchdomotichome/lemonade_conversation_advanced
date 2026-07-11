@@ -671,26 +671,34 @@ class LemonadeConversationEntity(
 
                 async def _content_iter(
                     raw: AsyncGenerator[dict[str, Any], None],
-                ) -> AsyncGenerator[str, None]:
-                    """Convert dict-based API stream to plain content strings.
+                ) -> AsyncGenerator[dict[str, Any], None]:
+                    """Filter dict stream for HA's ``async_add_delta_content_stream``.
 
-                    Yields only text deltas to ``async_add_delta_content_stream``
-                    (which expects ``AsyncIterable[str]``).  Captures
-                    ``tool_calls`` and ``thinking_content`` for
-                    post-stream processing.
+                    ``async_add_delta_content_stream`` expects
+                    ``AsyncIterable[dict]`` (it calls ``.get("content")`` on
+                    each item).  This adapter:
+                      - passes through content-only dicts
+                      - captures ``tool_calls`` and ``thinking_content`` for
+                        post-stream processing
                     """
                     nonlocal captured_tool_calls, captured_thinking
                     async for delta in raw:
                         _LOGGER.debug("Stream delta: %s", delta)
-                        content = delta.get("content", "")
-                        if content:
-                            yield content
+                        # Capture tool calls for post-stream processing
                         tc = delta.get("tool_calls")
                         if tc:
                             captured_tool_calls.extend(tc)
-                        think = delta.get("thinking_content", "")
+                        # Capture thinking/reasoning content
+                        think = (
+                            delta.get("thinking_content")
+                            or delta.get("reasoning_content")
+                            or ""
+                        )
                         if think:
                             captured_thinking = (captured_thinking or "") + think
+                        # Pass through content-only deltas to HA's streaming
+                        if "content" in delta and delta["content"] is not None:
+                            yield {"content": delta["content"]}
 
                 async for _ in chat_log.async_add_delta_content_stream(
                     self.entity_id,
