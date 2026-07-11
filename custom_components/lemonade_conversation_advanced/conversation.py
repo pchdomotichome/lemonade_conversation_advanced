@@ -405,19 +405,27 @@ class LemonadeConversationEntity(
         chat_log: conversation.ChatLog,
         user_prompt: str,
         intent: dict[str, Any] | None = None,
-    ) -> None:
+        start_idx: int | None = None,
+    ) -> int:
         """Inject entity states for areas mentioned in the user prompt.
 
-        Inserts BEFORE the user message so the LLM sees the states before
-        it reads the query. When *intent* contains a ``domain_hint``, only
+        Inserts the state block right after the last user message (the
+        "current-turn zone") so ``_build_messages`` keeps it in the payload
+        sent to the LLM. When *intent* contains a ``domain_hint``, only
         entities matching that domain are injected.
+
+        Returns the insertion index to use for the next block.
         """
         if not user_prompt:
-            return
+            return start_idx if start_idx is not None else 0
 
-        insert_idx = self._find_user_content_idx(chat_log)
-        if insert_idx is None:
-            return
+        if start_idx is None:
+            user_idx = self._find_user_content_idx(chat_log)
+            if user_idx is None:
+                return 0
+            start_idx = user_idx + 1
+
+        insert_idx = start_idx
 
         area_registry = ar.async_get(self.hass)
         entity_registry = er.async_get(self.hass)
@@ -506,6 +514,8 @@ class LemonadeConversationEntity(
             )
             insert_idx += 1
 
+        return insert_idx
+
     @staticmethod
     def _cleanup_stale_system_content(chat_log: conversation.ChatLog) -> None:
         """Remove stale injected SystemContent from previous turns.
@@ -592,8 +602,21 @@ class LemonadeConversationEntity(
                 action_hint,
             )
 
+        # All current-turn context is inserted right after the last user
+        # message so _build_messages keeps it (the "current-turn zone").
+        # A single shared index keeps the blocks in a stable order:
+        #   <user> <area states> <rag context> <CRITICAL REMINDER>
+        post_user_idx = self._find_user_content_idx(chat_log)
+        cur_idx = (
+            post_user_idx + 1
+            if post_user_idx is not None
+            else len(chat_log.content)
+        )
+
         # Pre-inject entity states for areas mentioned in the prompt
-        await self._inject_area_entity_states(chat_log, user_prompt, intent)
+        cur_idx = await self._inject_area_entity_states(
+            chat_log, user_prompt, intent, cur_idx
+        )
 
         # RAG: local keyword-based entity retrieval per user prompt
         max_iterations = int(options.get(CONF_MAX_ITERATIONS, DEFAULT_MAX_ITERATIONS))
@@ -601,8 +624,7 @@ class LemonadeConversationEntity(
         if isinstance(enable_rag, str):
             enable_rag = enable_rag in ("1", "true", "yes", "on")
         rag_top_k = int(options.get(CONF_RAG_TOP_K, DEFAULT_RAG_TOP_K))
-        rag_insert_idx = self._find_user_content_idx(chat_log)
-        if rag_insert_idx is not None and enable_rag and user_prompt:
+        if post_user_idx is not None and enable_rag and user_prompt:
             rag_index = self.hass.data[DOMAIN].get("rag_index")
             if rag_index is None:
                 cache_dir = f"{self.hass.config.config_dir}/lemonade_rag_cache"
@@ -638,18 +660,18 @@ class LemonadeConversationEntity(
                             entity_context[:200],
                         )
                         chat_log.content.insert(
-                            rag_insert_idx,
+                            cur_idx,
                             conversation.SystemContent(content=entity_context),
                         )
+                        cur_idx += 1
                 except Exception:
                     pass
 
-        # Bookend: insert a reminder AFTER the user message so the LLM
-        # re-reads the "don't call tools" instruction right after the query.
-        post_user_idx = self._find_user_content_idx(chat_log)
+        # Bookend: insert a reminder after the injected context so the LLM
+        # re-reads the "don't call tools" instruction right after the states.
         if post_user_idx is not None:
             chat_log.content.insert(
-                post_user_idx + 1,
+                cur_idx,
                 conversation.SystemContent(
                     content=(
                         "CRITICAL REMINDER: All necessary entity states are "
