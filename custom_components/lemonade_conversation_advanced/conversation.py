@@ -256,18 +256,47 @@ class LemonadeConversationEntity(
         self,
         chat_log: conversation.ChatLog,
     ) -> list[dict[str, Any]]:
-        """Serialise ChatLog content into OpenAI-format messages."""
+        """Serialise ChatLog content into OpenAI-format messages.
+
+        Only keeps system content from:
+          1. The core prompt region (before the first non-system entry).
+          2. The current turn's injection zone (after the last UserContent).
+        All system content interleaved between old conversation turns is
+        stale injected context and is discarded.
+        """
         options = self.subentry.data
         max_history = int(options.get(CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY))
+
+        # Find the last UserContent index — everything after it is fresh
+        last_user_idx = -1
+        for i, content in enumerate(chat_log.content):
+            if isinstance(content, conversation.UserContent):
+                last_user_idx = i
+
+        # Find the first non-system index — everything before is core prompt
+        first_nonsys_idx = len(chat_log.content)
+        for i, content in enumerate(chat_log.content):
+            if not isinstance(content, conversation.SystemContent):
+                first_nonsys_idx = i
+                break
 
         system_messages: list[dict[str, Any]] = []
         non_system_messages: list[dict[str, Any]] = []
 
-        for content in chat_log.content:
+        for i, content in enumerate(chat_log.content):
+            in_core_region = i < first_nonsys_idx
+            in_current_turn = i > last_user_idx
+
             if isinstance(content, conversation.SystemContent):
-                system_messages.append({"role": "system", "content": content.content})
+                # Keep system from core prompt region OR current turn injection zone
+                if in_core_region or in_current_turn:
+                    system_messages.append(
+                        {"role": "system", "content": content.content}
+                    )
             elif isinstance(content, conversation.UserContent):
-                non_system_messages.append({"role": "user", "content": content.content})
+                non_system_messages.append({
+                    "role": "user", "content": content.content,
+                })
             elif isinstance(content, conversation.AssistantContent):
                 msg: dict[str, Any] = {
                     "role": "assistant",
