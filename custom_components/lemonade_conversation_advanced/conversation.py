@@ -444,7 +444,13 @@ class LemonadeConversationEntity(
             _LOGGER.debug(
                 "No area name found in prompt: %s", user_prompt[:100]
             )
-            return
+            return insert_idx
+
+        def _should_inject(e: er.RegistryEntry) -> bool:
+            """Include exposed entities + climate (read-only temp data)."""
+            return async_should_expose(
+                self.hass, "conversation", e.entity_id
+            ) or e.domain == "climate"
 
         for area_entry in matched_areas:
             # Collect entities matching this area + optional domain filter
@@ -453,7 +459,7 @@ class LemonadeConversationEntity(
             area_lower = area_entry.name.lower()
 
             for e in entity_registry.entities.values():
-                if not async_should_expose(self.hass, "conversation", e.entity_id):
+                if not _should_inject(e):
                     continue
                 if domain_hint and e.domain != domain_hint:
                     continue
@@ -464,7 +470,7 @@ class LemonadeConversationEntity(
             for e in entity_registry.entities.values():
                 if e.entity_id in seen_ids:
                     continue
-                if not async_should_expose(self.hass, "conversation", e.entity_id):
+                if not _should_inject(e):
                     continue
                 if domain_hint and e.domain != domain_hint:
                     continue
@@ -744,41 +750,37 @@ class LemonadeConversationEntity(
             # --- streaming path (skipped if disabled or after a failure) --- #
             if enable_streaming:
                 try:
-                    captured_tool_calls: list[ToolInput] = []
-                    captured_thinking: str | None = None
+                    had_tool_calls = False
 
                     async def _content_iter(
                         raw: AsyncGenerator[dict[str, Any], None],
                     ) -> AsyncGenerator[dict[str, Any], None]:
-                        """Filter dict stream for HA's ``async_add_delta_content_stream``.
+                        """Pass all delta types through to ``async_add_delta_content_stream``.
 
-                        ``async_add_delta_content_stream`` expects
-                        ``AsyncIterable[dict]`` (it calls ``.get("content")`` on
-                        each item).  This adapter:
-                          - passes through content-only dicts
-                          - captures ``tool_calls`` and ``thinking_content`` for
-                            post-stream processing
+                        ``async_add_delta_content_stream`` accepts dicts with
+                        ``content``, ``tool_calls``, and ``thinking_content`` keys
+                        and accumulates them into a single ``AssistantContent`` at
+                        stream end.
                         """
-                        nonlocal captured_tool_calls, captured_thinking
+                        nonlocal had_tool_calls
                         async for delta in raw:
                             _LOGGER.debug("Stream delta: %s", delta)
-                            # Capture tool calls for post-stream processing
+                            # Pass through content deltas
+                            if "content" in delta and delta["content"] is not None:
+                                yield {"content": delta["content"]}
+                            # Pass through tool calls (already ToolInput objects)
                             tc = delta.get("tool_calls")
                             if tc:
-                                captured_tool_calls.extend(tc)
-                            # Capture thinking/reasoning content
+                                had_tool_calls = True
+                                yield {"tool_calls": tc}
+                            # Pass through thinking/reasoning content
                             think = (
                                 delta.get("thinking_content")
                                 or delta.get("reasoning_content")
                                 or ""
                             )
                             if think:
-                                captured_thinking = (
-                                    captured_thinking or ""
-                                ) + think
-                            # Pass through content-only deltas to HA's streaming
-                            if "content" in delta and delta["content"] is not None:
-                                yield {"content": delta["content"]}
+                                yield {"thinking_content": think}
 
                     async for _ in chat_log.async_add_delta_content_stream(
                         self.entity_id,
@@ -788,18 +790,11 @@ class LemonadeConversationEntity(
                     ):
                         pass
 
-                    # If the stream produced tool_calls, add them to the log
-                    # so HA can execute them and the loop can continue.
-                    if captured_tool_calls:
-                        async for _ in chat_log.async_add_assistant_content(
-                            conversation.AssistantContent(
-                                agent_id=self.entity_id,
-                                content=None,
-                                thinking_content=captured_thinking,
-                                tool_calls=captured_tool_calls,
-                            ),
-                        ):
-                            pass
+                    # ``async_add_delta_content_stream`` already created a single
+                    # ``AssistantContent`` with content + tool_calls (if any),
+                    # added it to the chat log, and executed any tool calls.
+                    # Just decide whether to continue or break.
+                    if had_tool_calls:
                         continue
 
                     # Text-only response — done
