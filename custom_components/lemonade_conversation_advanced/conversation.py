@@ -499,7 +499,9 @@ class LemonadeConversationEntity(
                     or entity_entry.original_name
                     or entity_entry.entity_id
                 )
-                entity_context += _format_entity_state(entity_entry.entity_id, friendly, state_obj)
+                entity_context += self._format_entity_state(
+                    entity_entry.entity_id, friendly, state_obj
+                )
 
             _LOGGER.debug(
                 "Injected %d entity states for area '%s'%s (%d chars)",
