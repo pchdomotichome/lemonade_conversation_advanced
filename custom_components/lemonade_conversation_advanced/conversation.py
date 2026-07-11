@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import AsyncGenerator
 from typing import Any, Literal, override
 
 from homeassistant.components import conversation
@@ -665,25 +666,53 @@ class LemonadeConversationEntity(
 
             # --- try streaming first, fallback to non-streaming --------- #
             try:
-                # Wrap the client stream with logging
-                async def _log_stream(stream):
-                    async for delta in stream:
-                        _LOGGER.debug("Stream delta: %s", delta)
-                        yield delta
+                captured_tool_calls: list[ToolInput] = []
+                captured_thinking: str | None = None
 
-                async for delta in chat_log.async_add_delta_content_stream(
+                async def _content_iter(
+                    raw: AsyncGenerator[dict[str, Any], None],
+                ) -> AsyncGenerator[str, None]:
+                    """Convert dict-based API stream to plain content strings.
+
+                    Yields only text deltas to ``async_add_delta_content_stream``
+                    (which expects ``AsyncIterable[str]``).  Captures
+                    ``tool_calls`` and ``thinking_content`` for
+                    post-stream processing.
+                    """
+                    nonlocal captured_tool_calls, captured_thinking
+                    async for delta in raw:
+                        _LOGGER.debug("Stream delta: %s", delta)
+                        content = delta.get("content", "")
+                        if content:
+                            yield content
+                        tc = delta.get("tool_calls")
+                        if tc:
+                            captured_tool_calls.extend(tc)
+                        think = delta.get("thinking_content", "")
+                        if think:
+                            captured_thinking = (captured_thinking or "") + think
+
+                async for _ in chat_log.async_add_delta_content_stream(
                     self.entity_id,
-                    _log_stream(self._client.chat_completions_stream(payload)),
+                    _content_iter(self._client.chat_completions_stream(payload)),
                 ):
                     pass
 
-                # If the last entry in chat_log is a tool result (added by
-                # async_add_delta_content_stream), continue the loop so the
-                # LLM sees the result in the next iteration.
-                if chat_log.unresponded_tool_results:
+                # If the stream produced tool_calls, add them to the log so
+                # HA can execute them and the loop can continue.
+                if captured_tool_calls:
+                    async for _ in chat_log.async_add_assistant_content(
+                        conversation.AssistantContent(
+                            agent_id=self.entity_id,
+                            content=None,
+                            thinking_content=captured_thinking,
+                            tool_calls=captured_tool_calls,
+                        ),
+                    ):
+                        pass
                     continue
 
-                # No tool calls — final text response received
+                # Text-only response — done
                 break
 
             except (LemonadeConnectionError, LemonadeAPIError) as err:
