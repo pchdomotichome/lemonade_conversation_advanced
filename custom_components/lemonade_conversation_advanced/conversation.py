@@ -258,7 +258,7 @@ class LemonadeConversationEntity(
     ) -> list[dict[str, Any]]:
         """Serialise ChatLog content into OpenAI-format messages."""
         options = self.subentry.data
-        max_history = options.get(CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY)
+        max_history = int(options.get(CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY))
 
         system_messages: list[dict[str, Any]] = []
         non_system_messages: list[dict[str, Any]] = []
@@ -566,11 +566,11 @@ class LemonadeConversationEntity(
         await self._inject_area_entity_states(chat_log, user_prompt, intent)
 
         # RAG: local keyword-based entity retrieval per user prompt
-        max_iterations = options.get(CONF_MAX_ITERATIONS, DEFAULT_MAX_ITERATIONS)
+        max_iterations = int(options.get(CONF_MAX_ITERATIONS, DEFAULT_MAX_ITERATIONS))
         enable_rag = options.get(CONF_ENABLE_RAG, DEFAULT_ENABLE_RAG)
         if isinstance(enable_rag, str):
             enable_rag = enable_rag in ("1", "true", "yes", "on")
-        rag_top_k = options.get(CONF_RAG_TOP_K, DEFAULT_RAG_TOP_K)
+        rag_top_k = int(options.get(CONF_RAG_TOP_K, DEFAULT_RAG_TOP_K))
         rag_insert_idx = self._find_user_content_idx(chat_log)
         if rag_insert_idx is not None and enable_rag and user_prompt:
             rag_index = self.hass.data[DOMAIN].get("rag_index")
