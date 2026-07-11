@@ -48,7 +48,8 @@
           "default_model": "Default Model",
           "prompt": "System Prompt",
           "timeout": "Timeout (seconds)",
-          "llm_hass_api": "Home Assistant LLM API"
+          "llm_hass_api": "Home Assistant LLM API",
+          "enable_streaming": "Enable Streaming (uncheck to debug non-streaming)"
         }
       }
     }

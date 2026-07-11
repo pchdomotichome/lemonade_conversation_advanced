@@ -36,6 +36,7 @@ from .const import (
     CONF_DEBUG_MODE,
     CONF_END_WORDS,
     CONF_ENABLE_RAG,
+    CONF_ENABLE_STREAMING,
     CONF_FIRST_DELTA_TIMEOUT,
     CONF_FOLLOW_UP_PHRASES,
     CONF_LLM_HASS_API,
@@ -58,6 +59,7 @@ from .const import (
     DEFAULT_DEBUG_MODE,
     DEFAULT_END_WORDS,
     DEFAULT_ENABLE_RAG,
+    DEFAULT_ENABLE_STREAMING,
     DEFAULT_FIRST_DELTA_TIMEOUT,
     DEFAULT_FOLLOW_UP_PHRASES,
     DEFAULT_MAX_HISTORY,
@@ -99,6 +101,7 @@ DEFAULT_CONVERSATION_DATA = {
     CONF_FIRST_DELTA_TIMEOUT: DEFAULT_FIRST_DELTA_TIMEOUT,
     CONF_MAX_RETRIES: DEFAULT_MAX_RETRIES,
     CONF_RETRY_BACKOFF: DEFAULT_RETRY_BACKOFF,
+    CONF_ENABLE_STREAMING: DEFAULT_ENABLE_STREAMING,
 }
 
 DEFAULT_AI_TASK_DATA = {
@@ -335,7 +338,13 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
 
         if user_input is not None:
             # Normalize boolean fields from string "1"/"0" to proper bools
-            for key in (CONF_ENABLE_RAG, CONF_CONTROL_HA, CONF_DEBUG_MODE, CONF_CLEAN_RESPONSES):
+            for key in (
+                CONF_ENABLE_RAG,
+                CONF_CONTROL_HA,
+                CONF_DEBUG_MODE,
+                CONF_CLEAN_RESPONSES,
+                CONF_ENABLE_STREAMING,
+            ):
                 if key in user_input:
                     user_input[key] = user_input[key] in ("1", True, "true")
             title = user_input.get(CONF_MODEL_NAME, "Lemonade")
@@ -474,6 +483,22 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                             options=[
                                 SelectOptionDict(value="1", label="On"),
                                 SelectOptionDict(value="0", label="Off"),
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_ENABLE_STREAMING,
+                        default=_bool_val(
+                            CONF_ENABLE_STREAMING, DEFAULT_ENABLE_STREAMING
+                        ),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value="1", label="On (stream)"),
+                                SelectOptionDict(
+                                    value="0", label="Off (non-streaming)"
+                                ),
                             ],
                             mode=SelectSelectorMode.DROPDOWN,
                         )

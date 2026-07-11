@@ -32,6 +32,7 @@ from .const import (
     CONF_CONTROL_HA,
     CONF_DEBUG_MODE,
     CONF_ENABLE_RAG,
+    CONF_ENABLE_STREAMING,
     CONF_END_WORDS,
     CONF_FIRST_DELTA_TIMEOUT,
     CONF_FOLLOW_UP_PHRASES,
@@ -52,6 +53,7 @@ from .const import (
     DEFAULT_CONTROL_HA,
     DEFAULT_DEBUG_MODE,
     DEFAULT_ENABLE_RAG,
+    DEFAULT_ENABLE_STREAMING,
     DEFAULT_FIRST_DELTA_TIMEOUT,
     DEFAULT_MAX_HISTORY,
     DEFAULT_MAX_ITERATIONS,
@@ -728,124 +730,137 @@ class LemonadeConversationEntity(
                 ),
             )
 
+        enable_streaming = options.get(CONF_ENABLE_STREAMING, DEFAULT_ENABLE_STREAMING)
+        if isinstance(enable_streaming, str):
+            enable_streaming = enable_streaming in ("1", "true", "yes", "on")
+
         for iteration in range(max_iterations):
             _LOGGER.debug("Chat iteration %d", iteration)
             messages = self._build_messages(chat_log)
-            payload = self._build_payload(messages, tools, stream=True)
+            payload = self._build_payload(messages, tools, stream=enable_streaming)
 
-            # --- try streaming first, fallback to non-streaming --------- #
-            try:
-                captured_tool_calls: list[ToolInput] = []
-                captured_thinking: str | None = None
-
-                async def _content_iter(
-                    raw: AsyncGenerator[dict[str, Any], None],
-                ) -> AsyncGenerator[dict[str, Any], None]:
-                    """Filter dict stream for HA's ``async_add_delta_content_stream``.
-
-                    ``async_add_delta_content_stream`` expects
-                    ``AsyncIterable[dict]`` (it calls ``.get("content")`` on
-                    each item).  This adapter:
-                      - passes through content-only dicts
-                      - captures ``tool_calls`` and ``thinking_content`` for
-                        post-stream processing
-                    """
-                    nonlocal captured_tool_calls, captured_thinking
-                    async for delta in raw:
-                        _LOGGER.debug("Stream delta: %s", delta)
-                        # Capture tool calls for post-stream processing
-                        tc = delta.get("tool_calls")
-                        if tc:
-                            captured_tool_calls.extend(tc)
-                        # Capture thinking/reasoning content
-                        think = (
-                            delta.get("thinking_content")
-                            or delta.get("reasoning_content")
-                            or ""
-                        )
-                        if think:
-                            captured_thinking = (captured_thinking or "") + think
-                        # Pass through content-only deltas to HA's streaming
-                        if "content" in delta and delta["content"] is not None:
-                            yield {"content": delta["content"]}
-
-                async for _ in chat_log.async_add_delta_content_stream(
-                    self.entity_id,
-                    _content_iter(self._client.chat_completions_stream(payload)),
-                ):
-                    pass
-
-                # If the stream produced tool_calls, add them to the log so
-                # HA can execute them and the loop can continue.
-                if captured_tool_calls:
-                    async for _ in chat_log.async_add_assistant_content(
-                        conversation.AssistantContent(
-                            agent_id=self.entity_id,
-                            content=None,
-                            thinking_content=captured_thinking,
-                            tool_calls=captured_tool_calls,
-                        ),
-                    ):
-                        pass
-                    continue
-
-                # Text-only response — done
-                break
-
-            except (LemonadeConnectionError, LemonadeAPIError) as err:
-                _LOGGER.error(
-                    "Streaming failed for iteration %d: %s", iteration, err
-                )
-                # Fall back to non-streaming
+            # --- streaming path (skipped if disabled or after a failure) --- #
+            if enable_streaming:
                 try:
-                    messages = self._build_messages(chat_log)
-                    payload = self._build_payload(messages, tools, stream=False)
-                    data = await self._client.chat_completions(payload)
-                    message = data["choices"][0]["message"]
-                except (LemonadeConnectionError, LemonadeAPIError) as retry_err:
-                    raise HomeAssistantError(
-                        f"Connection error: {err} "
-                        f"(non-streaming fallback failed: {retry_err})"
-                    ) from retry_err
+                    captured_tool_calls: list[ToolInput] = []
+                    captured_thinking: str | None = None
 
-                # Process the non-streaming message
-                thinking_content = None
-                content_text = message.get("content", "")
-                if content_text:
-                    cleaned, thinking = self._extract_thinking(content_text)
-                    content_text = cleaned
-                    thinking_content = thinking or None
+                    async def _content_iter(
+                        raw: AsyncGenerator[dict[str, Any], None],
+                    ) -> AsyncGenerator[dict[str, Any], None]:
+                        """Filter dict stream for HA's ``async_add_delta_content_stream``.
 
-                if message.get("tool_calls"):
-                    tool_inputs = [
-                        ToolInput(
-                            tool_name=tc["function"]["name"],
-                            tool_args=tc["function"]["arguments"]
-                            if isinstance(tc["function"]["arguments"], dict)
-                            else json.loads(tc["function"]["arguments"]),
-                            id=tc["id"],
-                        )
-                        for tc in message["tool_calls"]
-                    ]
-                    async for _ in chat_log.async_add_assistant_content(
-                        conversation.AssistantContent(
-                            agent_id=self.entity_id,
-                            content=content_text or None,
-                            thinking_content=thinking_content,
-                            tool_calls=tool_inputs,
+                        ``async_add_delta_content_stream`` expects
+                        ``AsyncIterable[dict]`` (it calls ``.get("content")`` on
+                        each item).  This adapter:
+                          - passes through content-only dicts
+                          - captures ``tool_calls`` and ``thinking_content`` for
+                            post-stream processing
+                        """
+                        nonlocal captured_tool_calls, captured_thinking
+                        async for delta in raw:
+                            _LOGGER.debug("Stream delta: %s", delta)
+                            # Capture tool calls for post-stream processing
+                            tc = delta.get("tool_calls")
+                            if tc:
+                                captured_tool_calls.extend(tc)
+                            # Capture thinking/reasoning content
+                            think = (
+                                delta.get("thinking_content")
+                                or delta.get("reasoning_content")
+                                or ""
+                            )
+                            if think:
+                                captured_thinking = (
+                                    captured_thinking or ""
+                                ) + think
+                            # Pass through content-only deltas to HA's streaming
+                            if "content" in delta and delta["content"] is not None:
+                                yield {"content": delta["content"]}
+
+                    async for _ in chat_log.async_add_delta_content_stream(
+                        self.entity_id,
+                        _content_iter(
+                            self._client.chat_completions_stream(payload)
                         ),
                     ):
                         pass
-                    continue
 
-                chat_log.async_add_assistant_content_without_tools(
+                    # If the stream produced tool_calls, add them to the log
+                    # so HA can execute them and the loop can continue.
+                    if captured_tool_calls:
+                        async for _ in chat_log.async_add_assistant_content(
+                            conversation.AssistantContent(
+                                agent_id=self.entity_id,
+                                content=None,
+                                thinking_content=captured_thinking,
+                                tool_calls=captured_tool_calls,
+                            ),
+                        ):
+                            pass
+                        continue
+
+                    # Text-only response — done
+                    break
+
+                except (LemonadeConnectionError, LemonadeAPIError) as err:
+                    _LOGGER.error(
+                        "Streaming failed for iteration %d: %s", iteration, err
+                    )
+                    # Disable streaming for this and remaining iterations,
+                    # then fall through to the non-streaming path below.
+                    enable_streaming = False
+                    payload = self._build_payload(
+                        messages, tools, stream=False
+                    )
+
+            # --- non-streaming path (primary or post-streaming fallback) --- #
+            try:
+                data = await self._client.chat_completions(payload)
+                message = data["choices"][0]["message"]
+            except (LemonadeConnectionError, LemonadeAPIError) as retry_err:
+                raise HomeAssistantError(
+                    f"Connection error: {retry_err}"
+                ) from retry_err
+
+            # Process the non-streaming message
+            thinking_content = None
+            content_text = message.get("content", "")
+            if content_text:
+                cleaned, thinking = self._extract_thinking(content_text)
+                content_text = cleaned
+                thinking_content = thinking or None
+
+            if message.get("tool_calls"):
+                tool_inputs = [
+                    ToolInput(
+                        tool_name=tc["function"]["name"],
+                        tool_args=tc["function"]["arguments"]
+                        if isinstance(tc["function"]["arguments"], dict)
+                        else json.loads(tc["function"]["arguments"]),
+                        id=tc["id"],
+                    )
+                    for tc in message["tool_calls"]
+                ]
+                async for _ in chat_log.async_add_assistant_content(
                     conversation.AssistantContent(
                         agent_id=self.entity_id,
                         content=content_text or None,
                         thinking_content=thinking_content,
+                        tool_calls=tool_inputs,
                     ),
-                )
-                break
+                ):
+                    pass
+                continue
+
+            chat_log.async_add_assistant_content_without_tools(
+                conversation.AssistantContent(
+                    agent_id=self.entity_id,
+                    content=content_text or None,
+                    thinking_content=thinking_content,
+                ),
+            )
+            break
 
         else:
             _LOGGER.error("Max tool calling iterations reached")
