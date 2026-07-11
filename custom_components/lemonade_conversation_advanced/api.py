@@ -56,7 +56,7 @@ class LemonadeAPIClient:
         self._request_timeout = request_timeout
         self._connect_timeout = connect_timeout
         self._first_delta_timeout = first_delta_timeout
-        self._max_retries = max_retries
+        self._max_retries = int(max_retries)
         self._retry_backoff = retry_backoff
         self._session: aiohttp.ClientSession | None = None
 

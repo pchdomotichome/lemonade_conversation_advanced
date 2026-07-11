@@ -147,7 +147,7 @@ class LemonadeConversationEntity(
             request_timeout=opts.get(CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT),
             connect_timeout=opts.get(CONF_CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT),
             first_delta_timeout=opts.get(CONF_FIRST_DELTA_TIMEOUT, DEFAULT_FIRST_DELTA_TIMEOUT),
-            max_retries=opts.get(CONF_MAX_RETRIES, DEFAULT_MAX_RETRIES),
+            max_retries=int(opts.get(CONF_MAX_RETRIES, DEFAULT_MAX_RETRIES)),
             retry_backoff=opts.get(CONF_RETRY_BACKOFF, DEFAULT_RETRY_BACKOFF),
         )
 
