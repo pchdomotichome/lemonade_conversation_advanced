@@ -48,6 +48,7 @@ CONF_FOLLOW_UP_PHRASES = "follow_up_phrases"
 CONF_END_WORDS = "end_words"
 CONF_CLEAN_RESPONSES = "clean_responses"
 CONF_ENABLE_STREAMING = "enable_streaming"
+CONF_RESPECT_EXPOSURE = "respect_exposure"
 CONF_TIMEOUT = "timeout"
 CONF_LLM_HASS_API = "llm_hass_api"
 
@@ -92,6 +93,7 @@ DEFAULT_ENABLE_CUSTOM_TOOLS = False
 DEFAULT_ENABLE_RAG = False  # Disabled until stable
 DEFAULT_ENABLE_STREAMING = True  # Stream first response; non-streaming fallback on failure
 DEFAULT_RAG_TOP_K = 12
+DEFAULT_RESPECT_EXPOSURE = True  # Only expose entities visible to conversation agent (HA default)
 DEFAULT_BRAVE_API_KEY = ""
 DEFAULT_ALLOWED_IPS = ""
 DEFAULT_SEARCH_PROVIDER = "none"

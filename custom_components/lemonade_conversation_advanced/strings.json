@@ -49,7 +49,8 @@
           "prompt": "System Prompt",
           "timeout": "Timeout (seconds)",
           "llm_hass_api": "Home Assistant LLM API",
-          "enable_streaming": "Enable Streaming (uncheck to debug non-streaming)"
+          "enable_streaming": "Enable Streaming (uncheck to debug non-streaming)",
+          "respect_exposure": "Respect entity exposure — only access entities exposed to this assistant"
         }
       }
     }

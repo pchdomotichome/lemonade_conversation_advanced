@@ -43,6 +43,7 @@ from .const import (
     CONF_MODEL_NAME,
     CONF_RAG_TOP_K,
     CONF_REQUEST_TIMEOUT,
+    CONF_RESPECT_EXPOSURE,
     CONF_RESPONSE_MODE,
     CONF_RETRY_BACKOFF,
     CONF_SYSTEM_PROMPT,
@@ -61,6 +62,7 @@ from .const import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_RAG_TOP_K,
     DEFAULT_REQUEST_TIMEOUT,
+    DEFAULT_RESPECT_EXPOSURE,
     DEFAULT_RESPONSE_MODE,
     DEFAULT_RETRY_BACKOFF,
     DEFAULT_SYSTEM_PROMPT,
@@ -249,7 +251,14 @@ class LemonadeConversationEntity(
                 )
             )
 
-        return conversation.async_get_result_from_chat_log(user_input, chat_log)
+        result = conversation.async_get_result_from_chat_log(user_input, chat_log)
+        _LOGGER.debug(
+            "ConversationResult speech=%s continue=%s chat_log[-1]=%s",
+            result.response.speech,
+            result.continue_conversation,
+            chat_log.content[-1] if chat_log.content else "EMPTY",
+        )
+        return result
 
     # ------------------------------------------------------------------ #
     #  Helpers – build messages / payload from ChatLog                     #
@@ -446,11 +455,18 @@ class LemonadeConversationEntity(
             )
             return insert_idx
 
+        respect_exposure = bool(
+            self.subentry.data.get(
+                CONF_RESPECT_EXPOSURE, DEFAULT_RESPECT_EXPOSURE
+            )
+        )
+
         def _should_inject(e: er.RegistryEntry) -> bool:
-            """Include exposed entities + climate (read-only temp data)."""
+            if not respect_exposure:
+                return True
             return async_should_expose(
                 self.hass, "conversation", e.entity_id
-            ) or e.domain == "climate"
+            )
 
         for area_entry in matched_areas:
             # Collect entities matching this area + optional domain filter
@@ -701,6 +717,14 @@ class LemonadeConversationEntity(
                         domain_filter=domain_hint,
                         area_filter=None,
                     )
+                    respect_exposure = bool(
+                        options.get(CONF_RESPECT_EXPOSURE, DEFAULT_RESPECT_EXPOSURE)
+                    )
+                    if respect_exposure:
+                        relevant = [
+                            e for e in relevant
+                            if async_should_expose(self.hass, "conversation", e["entity_id"])
+                        ]
                     if relevant:
                         entity_context = "Other relevant entities for this request:\n"
                         for e in relevant:

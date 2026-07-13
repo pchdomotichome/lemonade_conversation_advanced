@@ -37,6 +37,7 @@ from .const import (
     CONF_END_WORDS,
     CONF_ENABLE_RAG,
     CONF_ENABLE_STREAMING,
+    CONF_RESPECT_EXPOSURE,
     CONF_FIRST_DELTA_TIMEOUT,
     CONF_FOLLOW_UP_PHRASES,
     CONF_LLM_HASS_API,
@@ -69,6 +70,7 @@ from .const import (
     DEFAULT_MODEL_NAME,
     DEFAULT_RAG_TOP_K,
     DEFAULT_REQUEST_TIMEOUT,
+    DEFAULT_RESPECT_EXPOSURE,
     DEFAULT_RESPONSE_MODE,
     DEFAULT_RETRY_BACKOFF,
     DEFAULT_SERVER_URL,
@@ -102,6 +104,7 @@ DEFAULT_CONVERSATION_DATA = {
     CONF_MAX_RETRIES: DEFAULT_MAX_RETRIES,
     CONF_RETRY_BACKOFF: DEFAULT_RETRY_BACKOFF,
     CONF_ENABLE_STREAMING: DEFAULT_ENABLE_STREAMING,
+    CONF_RESPECT_EXPOSURE: DEFAULT_RESPECT_EXPOSURE,
 }
 
 DEFAULT_AI_TASK_DATA = {
@@ -344,6 +347,7 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                 CONF_DEBUG_MODE,
                 CONF_CLEAN_RESPONSES,
                 CONF_ENABLE_STREAMING,
+                CONF_RESPECT_EXPOSURE,
             ):
                 if key in user_input:
                     user_input[key] = user_input[key] in ("1", True, "true")
@@ -498,6 +502,22 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                                 SelectOptionDict(value="1", label="On (stream)"),
                                 SelectOptionDict(
                                     value="0", label="Off (non-streaming)"
+                                ),
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_RESPECT_EXPOSURE,
+                        default=_bool_val(
+                            CONF_RESPECT_EXPOSURE, DEFAULT_RESPECT_EXPOSURE
+                        ),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value="1", label="On (exposed only)"),
+                                SelectOptionDict(
+                                    value="0", label="Off (all entities)"
                                 ),
                             ],
                             mode=SelectSelectorMode.DROPDOWN,
