@@ -77,6 +77,26 @@ from .const import (
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEMPERATURE,
     DOMAIN,
+    MAX_CONNECT_TIMEOUT,
+    MAX_FIRST_DELTA_TIMEOUT,
+    MAX_MAX_HISTORY,
+    MAX_MAX_ITERATIONS,
+    MAX_MAX_RETRIES,
+    MAX_MAX_TOKENS,
+    MAX_RAG_TOP_K,
+    MAX_REQUEST_TIMEOUT,
+    MAX_RETRY_BACKOFF,
+    MAX_TEMPERATURE,
+    MIN_CONNECT_TIMEOUT,
+    MIN_FIRST_DELTA_TIMEOUT,
+    MIN_MAX_HISTORY,
+    MIN_MAX_ITERATIONS,
+    MIN_MAX_RETRIES,
+    MIN_MAX_TOKENS,
+    MIN_RAG_TOP_K,
+    MIN_REQUEST_TIMEOUT,
+    MIN_RETRY_BACKOFF,
+    MIN_TEMPERATURE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -421,19 +441,19 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                         CONF_TEMPERATURE,
                         default=options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE),
                     ): NumberSelector(
-                        NumberSelectorConfig(min=0.0, max=2.0, step=0.05, mode=NumberSelectorMode.SLIDER)
+                        NumberSelectorConfig(min=MIN_TEMPERATURE, max=MAX_TEMPERATURE, step=0.05, mode=NumberSelectorMode.SLIDER)
                     ),
                     vol.Optional(
                         CONF_MAX_TOKENS,
                         default=options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS),
                     ): NumberSelector(
-                        NumberSelectorConfig(min=256, max=32768, step=256, mode=NumberSelectorMode.BOX)
+                        NumberSelectorConfig(min=MIN_MAX_TOKENS, max=MAX_MAX_TOKENS, step=256, mode=NumberSelectorMode.BOX)
                     ),
                     vol.Optional(
                         CONF_MAX_HISTORY,
                         default=options.get(CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY),
                     ): NumberSelector(
-                        NumberSelectorConfig(min=2, max=50, step=1, mode=NumberSelectorMode.BOX)
+                        NumberSelectorConfig(min=MIN_MAX_HISTORY, max=MAX_MAX_HISTORY, step=1, mode=NumberSelectorMode.BOX)
                     ),
                     vol.Optional(
                         CONF_RESPONSE_MODE,
@@ -477,7 +497,7 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                         CONF_MAX_ITERATIONS,
                         default=options.get(CONF_MAX_ITERATIONS, DEFAULT_MAX_ITERATIONS),
                     ): NumberSelector(
-                        NumberSelectorConfig(min=1, max=50, step=1, mode=NumberSelectorMode.BOX)
+                        NumberSelectorConfig(min=MIN_MAX_ITERATIONS, max=MAX_MAX_ITERATIONS, step=1, mode=NumberSelectorMode.BOX)
                     ),
                     vol.Optional(
                         CONF_DEBUG_MODE,
@@ -550,7 +570,7 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                         CONF_RAG_TOP_K,
                         default=options.get(CONF_RAG_TOP_K, DEFAULT_RAG_TOP_K),
                     ): NumberSelector(
-                        NumberSelectorConfig(min=1, max=50, step=1, mode=NumberSelectorMode.BOX)
+                        NumberSelectorConfig(min=MIN_RAG_TOP_K, max=MAX_RAG_TOP_K, step=1, mode=NumberSelectorMode.BOX)
                     ),
                     # ── Follow-up & End Phrases ────────────────────
                     vol.Optional(
@@ -570,31 +590,31 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                         CONF_REQUEST_TIMEOUT,
                         default=options.get(CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT),
                     ): NumberSelector(
-                        NumberSelectorConfig(min=0, max=600, step=5, mode=NumberSelectorMode.BOX)
+                        NumberSelectorConfig(min=MIN_REQUEST_TIMEOUT, max=MAX_REQUEST_TIMEOUT, step=5, mode=NumberSelectorMode.BOX)
                     ),
                     vol.Optional(
                         CONF_CONNECT_TIMEOUT,
                         default=options.get(CONF_CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT),
                     ): NumberSelector(
-                        NumberSelectorConfig(min=0, max=120, step=1, mode=NumberSelectorMode.BOX)
+                        NumberSelectorConfig(min=MIN_CONNECT_TIMEOUT, max=MAX_CONNECT_TIMEOUT, step=1, mode=NumberSelectorMode.BOX)
                     ),
                     vol.Optional(
                         CONF_FIRST_DELTA_TIMEOUT,
                         default=options.get(CONF_FIRST_DELTA_TIMEOUT, DEFAULT_FIRST_DELTA_TIMEOUT),
                     ): NumberSelector(
-                        NumberSelectorConfig(min=0, max=120, step=1, mode=NumberSelectorMode.BOX)
+                        NumberSelectorConfig(min=MIN_FIRST_DELTA_TIMEOUT, max=MAX_FIRST_DELTA_TIMEOUT, step=1, mode=NumberSelectorMode.BOX)
                     ),
                     vol.Optional(
                         CONF_MAX_RETRIES,
                         default=options.get(CONF_MAX_RETRIES, DEFAULT_MAX_RETRIES),
                     ): NumberSelector(
-                        NumberSelectorConfig(min=0, max=10, step=1, mode=NumberSelectorMode.BOX)
+                        NumberSelectorConfig(min=MIN_MAX_RETRIES, max=MAX_MAX_RETRIES, step=1, mode=NumberSelectorMode.BOX)
                     ),
                     vol.Optional(
                         CONF_RETRY_BACKOFF,
                         default=options.get(CONF_RETRY_BACKOFF, DEFAULT_RETRY_BACKOFF),
                     ): NumberSelector(
-                        NumberSelectorConfig(min=0.0, max=30.0, step=0.5, mode=NumberSelectorMode.BOX)
+                        NumberSelectorConfig(min=MIN_RETRY_BACKOFF, max=MAX_RETRY_BACKOFF, step=0.5, mode=NumberSelectorMode.BOX)
                     ),
                 }
             ),

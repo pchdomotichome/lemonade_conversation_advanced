@@ -20,8 +20,8 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.llm import ToolInput
 from voluptuous_openapi import convert
 
-from .api import (
-    LemonadeAPIClient,
+from .api import LemonadeAPIClient
+from .exceptions import (
     LemonadeAPIError,
     LemonadeAuthError,
     LemonadeConnectionError,

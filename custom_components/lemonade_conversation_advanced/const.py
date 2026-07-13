@@ -1,6 +1,8 @@
 """Constants for the Lemonade Conversation Advanced integration."""
 
-DOMAIN = "lemonade_conversation_advanced"
+from typing import Final
+
+DOMAIN: Final = "lemonade_conversation_advanced"
 SYSTEM_ENTRY_UNIQUE_ID = "lemonade_conversation_advanced_system_settings"
 
 # Server type options
@@ -104,6 +106,30 @@ DEFAULT_FOLLOW_UP_PHRASES = "anything else, what else, would you, do you, should
 DEFAULT_END_WORDS = "stop, cancel, no, nope, thanks, thank you, bye, goodbye, done, never mind, nevermind, forget it, that's all, that's it"
 DEFAULT_CLEAN_RESPONSES = False
 DEFAULT_TIMEOUT = 30
+
+# Limits for config flow selectors
+MIN_TEMPERATURE: Final = 0.0
+MAX_TEMPERATURE: Final = 2.0
+MIN_MAX_TOKENS: Final = 256
+MAX_MAX_TOKENS: Final = 32768
+MIN_MAX_HISTORY: Final = 2
+MAX_MAX_HISTORY: Final = 50
+MIN_MAX_ITERATIONS: Final = 1
+MAX_MAX_ITERATIONS: Final = 50
+MIN_RAG_TOP_K: Final = 1
+MAX_RAG_TOP_K: Final = 50
+MIN_REQUEST_TIMEOUT: Final = 0
+MAX_REQUEST_TIMEOUT: Final = 600
+MIN_CONNECT_TIMEOUT: Final = 0
+MAX_CONNECT_TIMEOUT: Final = 120
+MIN_FIRST_DELTA_TIMEOUT: Final = 0
+MAX_FIRST_DELTA_TIMEOUT: Final = 120
+MIN_MAX_RETRIES: Final = 0
+MAX_MAX_RETRIES: Final = 10
+MIN_RETRY_BACKOFF: Final = 0.0
+MAX_RETRY_BACKOFF: Final = 30.0
+MIN_TECHNICAL_PROMPT_LINES: Final = 1
+MAX_TECHNICAL_PROMPT_LINES: Final = 500
 
 # API timeouts (can be overridden per subentry)
 CONF_REQUEST_TIMEOUT = "request_timeout"

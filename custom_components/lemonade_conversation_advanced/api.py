@@ -14,19 +14,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.llm import ToolInput
 
+from .exceptions import (
+    LemonadeAPIError,
+    LemonadeAuthError,
+    LemonadeConnectionError,
+)
+
 _LOGGER = logging.getLogger(__name__)
-
-
-class LemonadeConnectionError(Exception):
-    """Connection to Lemonade server failed."""
-
-
-class LemonadeAuthError(Exception):
-    """Authentication with Lemonade server failed."""
-
-
-class LemonadeAPIError(Exception):
-    """Lemonade server returned an error response."""
 
 
 class LemonadeAPIClient:
