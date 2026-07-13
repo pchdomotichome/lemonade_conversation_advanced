@@ -863,12 +863,27 @@ class LemonadeConversationEntity(
 
                     # ``async_add_delta_content_stream`` already created a single
                     # ``AssistantContent`` with content + tool_calls (if any),
-                    # added it to the chat log, and executed any tool calls.
-                    # Just decide whether to continue or break.
+                    # added it to the chat log (via ``async_add_assistant_content``),
+                    # and executed any tool calls. However,
+                    # ``async_add_assistant_content`` does NOT notify frontend
+                    # subscribers (``_async_notify_subscribers``), so the
+                    # response never renders in the UI.  Workaround: pop the
+                    # silent duplicate and re-add via
+                    # ``async_add_assistant_content_without_tools`` which DOES
+                    # fire the notification event.
                     if had_tool_calls:
                         continue
 
-                    # Text-only response — done
+                    # Text-only response — notify frontend
+                    last = chat_log.content[-1]
+                    if (
+                        isinstance(last, conversation.AssistantContent)
+                        and not last.tool_calls
+                    ):
+                        chat_log.content.pop()
+                        chat_log.async_add_assistant_content_without_tools(last)
+
+                    # Done
                     break
 
                 except (LemonadeConnectionError, LemonadeAPIError) as err:
