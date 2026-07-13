@@ -575,14 +575,20 @@ class LemonadeConversationEntity(
         if state_obj is None:
             return f"- {entity_id} ({friendly}): unknown\n"
 
+        # Climate entities have two temperature fields: "temperature" (set
+        # point) and "current_temperature" (actual).  Rename the set point so
+        # the LLM doesn't confuse them.
+        is_climate = entity_id.startswith("climate.")
         extras: list[str] = []
         for key, val in state_obj.attributes.items():
             if key in LemonadeConversationEntity._STATE_METADATA_KEYS:
                 continue
             if isinstance(val, (list, dict)):
                 continue
-            extras.append(f"{key}={val}")
-        # Keep the most relevant attributes to avoid bloating the prompt.
+            label = key
+            if is_climate and key == "temperature":
+                label = "target_temperature"
+            extras.append(f"{label}={val}")
         extras = extras[:8]
 
         if extras:
