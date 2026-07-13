@@ -754,7 +754,7 @@ class LemonadeConversationEntity(
                 except Exception:
                     pass
 
-        # Bookend: insert a reminder after the injected context so the LLM
+        # Bookend: insert reminders after the injected context so the LLM
         # re-reads the "don't call tools" instruction right after the states.
         if post_user_idx is not None:
             chat_log.content.insert(
@@ -764,6 +764,20 @@ class LemonadeConversationEntity(
                         "CRITICAL REMINDER: All necessary entity states are "
                         "provided ABOVE. Answer using those states directly. "
                         "Do NOT call get_entity_state or get_entities_in_area."
+                    )
+                ),
+            )
+            cur_idx += 1
+            chat_log.content.insert(
+                cur_idx,
+                conversation.SystemContent(
+                    content=(
+                        "HONESTY RULE: NEVER make up or hallucinate data. "
+                        "If there is no climate, temperature, or humidity "
+                        "data for a requested area, say so honestly "
+                        "(e.g. \"No tengo datos de temperatura para esa área\"). "
+                        "Do NOT invent temperatures or pretend a sensor exists "
+                        "when the available data does not include one."
                     )
                 ),
             )
