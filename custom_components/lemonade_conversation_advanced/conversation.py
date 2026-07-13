@@ -766,6 +766,47 @@ class LemonadeConversationEntity(
         if isinstance(enable_streaming, str):
             enable_streaming = enable_streaming in ("1", "true", "yes", "on")
 
+        respect_exposure = bool(
+            options.get(CONF_RESPECT_EXPOSURE, DEFAULT_RESPECT_EXPOSURE)
+        )
+        if respect_exposure and chat_log.llm_api is not None:
+            original_call = chat_log.llm_api.async_call_tool
+
+            async def _exposure_filtered_call(
+                tool_input: ToolInput,
+            ) -> dict[str, Any]:
+                result = await original_call(tool_input)
+                if tool_input.tool_name == "get_entity_state":
+                    entity_id = (tool_input.tool_args or {}).get("entity_id")
+                    if entity_id and not async_should_expose(
+                        self.hass, "conversation", entity_id
+                    ):
+                        _LOGGER.debug(
+                            "Blocked get_entity_state for unexposed entity: %s",
+                            entity_id,
+                        )
+                        return {
+                            "error": "not_exposed",
+                            "error_text": (
+                                f"Entity {entity_id} is not exposed to "
+                                f"this assistant and cannot be accessed."
+                            ),
+                        }
+                elif tool_input.tool_name == "get_entities_in_area":
+                    entities = (result or {}).get("entities", [])
+                    filtered = [
+                        e
+                        for e in entities
+                        if async_should_expose(
+                            self.hass, "conversation", e.get("entity_id", "")
+                        )
+                    ]
+                    if result is not None:
+                        result = {**result, "entities": filtered, "count": len(filtered)}
+                return result
+
+            chat_log.llm_api.async_call_tool = _exposure_filtered_call
+
         for iteration in range(max_iterations):
             _LOGGER.debug("Chat iteration %d", iteration)
             messages = self._build_messages(chat_log)
