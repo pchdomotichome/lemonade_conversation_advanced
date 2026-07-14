@@ -14,7 +14,9 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import aiohttp_client, config_validation as cv, llm
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
     NumberSelector,
@@ -395,6 +397,14 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
             return self.async_abort(reason="entry_not_loaded")
 
         if user_input is not None:
+            # Sections nest their fields; flatten back into a single dict so
+            # storage stays flat (backward compatible with conversation.py).
+            flat: dict[str, Any] = {}
+            for value in user_input.values():
+                if isinstance(value, dict):
+                    flat.update(value)
+            user_input = flat or user_input
+
             # Normalize boolean fields from string "1"/"0" to proper bools
             for key in (
                 CONF_ENABLE_RAG,
@@ -485,10 +495,12 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
         if not llm_api_options:
             llm_api_options = [{"value": "none", "label": "No LLM APIs available"}]
 
-        # Helper to convert stored bool to selector value string
-        def _bool_val(key: str, default: bool = False) -> str:
+        # Helper returning an actual bool for BooleanSelector (checkbox) defaults
+        def _bool(key: str, default: bool = False) -> bool:
             val = options.get(key, default)
-            return "1" if val else "0"
+            if isinstance(val, str):
+                return val in ("1", "true", "yes", "on", "True")
+            return bool(val)
 
         # Default display name shown/edited by the user
         if self._is_new:
@@ -502,343 +514,439 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
             step_id="set_options",
             data_schema=vol.Schema(
                 {
-                    # ── Name ────────────────────────────────────────
-                    vol.Required(CONF_NAME, default=default_name): TextSelector(
-                        TextSelectorConfig(type=TextSelectorType.TEXT)
-                    ),
-                    # ── Model & Prompts ─────────────────────────────
-                    vol.Required(
-                        CONF_MODEL_NAME,
-                        default=options.get(CONF_MODEL_NAME),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value=m, label=m)
-                                for m in model_options
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                            sort=True,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_SYSTEM_PROMPT,
-                        default=options.get(CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT),
-                    ): TextSelector(
-                        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
-                    ),
-                    vol.Optional(
-                        CONF_TECHNICAL_PROMPT,
-                        default=options.get(CONF_TECHNICAL_PROMPT, ""),
-                    ): TextSelector(
-                        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
-                    ),
-                    # ── Context & Entities ───────────────────────
-                    vol.Optional(
-                        CONF_CONTEXT_TEMPLATES,
-                        default="\n".join(
-                            options.get(CONF_CONTEXT_TEMPLATES, DEFAULT_CONTEXT_TEMPLATES)
-                        ),
-                    ): TextSelector(
-                        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
-                    ),
-                    vol.Optional(
-                        CONF_ENABLED_DOMAINS,
-                        default=options.get(
-                            CONF_ENABLED_DOMAINS, DEFAULT_ENABLED_DOMAINS
-                        ),
-                    ): cv.multi_select(SUPPORTED_DOMAINS),
-                    vol.Optional(
-                        CONF_ENTITY_ALIASES,
-                        default="\n".join(
-                            f"{k}: {v}"
-                            for k, v in options.get(
-                                CONF_ENTITY_ALIASES, DEFAULT_ENTITY_ALIASES
-                            ).items()
-                        ),
-                    ): TextSelector(
-                        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
-                    ),
-                    vol.Optional(
-                        CONF_MAX_ENTITIES_PER_DISCOVERY,
-                        default=options.get(
-                            CONF_MAX_ENTITIES_PER_DISCOVERY,
-                            DEFAULT_MAX_ENTITIES_PER_DISCOVERY,
-                        ),
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=MIN_MAX_ENTITIES_PER_DISCOVERY,
-                            max=MAX_MAX_ENTITIES_PER_DISCOVERY,
-                            step=5,
-                            mode=NumberSelectorMode.BOX,
-                        )
-                    ),
-                    # ── Response Settings ───────────────────────────
-                    vol.Optional(
-                        CONF_TEMPERATURE,
-                        default=options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE),
-                    ): NumberSelector(
-                        NumberSelectorConfig(min=MIN_TEMPERATURE, max=MAX_TEMPERATURE, step=0.05, mode=NumberSelectorMode.SLIDER)
-                    ),
-                    vol.Optional(
-                        CONF_MAX_TOKENS,
-                        default=options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS),
-                    ): NumberSelector(
-                        NumberSelectorConfig(min=MIN_MAX_TOKENS, max=MAX_MAX_TOKENS, step=256, mode=NumberSelectorMode.BOX)
-                    ),
-                    vol.Optional(
-                        CONF_MAX_HISTORY,
-                        default=options.get(CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY),
-                    ): NumberSelector(
-                        NumberSelectorConfig(min=MIN_MAX_HISTORY, max=MAX_MAX_HISTORY, step=1, mode=NumberSelectorMode.BOX)
-                    ),
-                    vol.Optional(
-                        CONF_RESPONSE_MODE,
-                        default=options.get(CONF_RESPONSE_MODE, DEFAULT_RESPONSE_MODE),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value="none", label="None (pass-through)"),
-                                SelectOptionDict(value="default", label="Default"),
-                                SelectOptionDict(value="always", label="Always respond"),
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_CLEAN_RESPONSES,
-                        default=_bool_val(CONF_CLEAN_RESPONSES, DEFAULT_CLEAN_RESPONSES),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value="1", label="On"),
-                                SelectOptionDict(value="0", label="Off"),
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    # ── Behaviour ──────────────────────────────────
-                    vol.Optional(
-                        CONF_CONTROL_HA,
-                        default=_bool_val(CONF_CONTROL_HA, DEFAULT_CONTROL_HA),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value="1", label="On"),
-                                SelectOptionDict(value="0", label="Off"),
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_CONFIRMATION_REQUIRED,
-                        default=_bool_val(
-                            CONF_CONFIRMATION_REQUIRED,
-                            DEFAULT_CONFIRMATION_REQUIRED,
-                        ),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value="1", label="On"),
-                                SelectOptionDict(value="0", label="Off"),
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_EXPOSE_SCRIPTS,
-                        default=_bool_val(
-                            CONF_EXPOSE_SCRIPTS, DEFAULT_EXPOSE_SCRIPTS
-                        ),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value="1", label="On"),
-                                SelectOptionDict(value="0", label="Off"),
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_EXPOSE_SCENES,
-                        default=_bool_val(
-                            CONF_EXPOSE_SCENES, DEFAULT_EXPOSE_SCENES
-                        ),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value="1", label="On"),
-                                SelectOptionDict(value="0", label="Off"),
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_MAX_ITERATIONS,
-                        default=options.get(CONF_MAX_ITERATIONS, DEFAULT_MAX_ITERATIONS),
-                    ): NumberSelector(
-                        NumberSelectorConfig(min=MIN_MAX_ITERATIONS, max=MAX_MAX_ITERATIONS, step=1, mode=NumberSelectorMode.BOX)
-                    ),
-                    vol.Optional(
-                        CONF_DEBUG_MODE,
-                        default=_bool_val(CONF_DEBUG_MODE, DEFAULT_DEBUG_MODE),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value="1", label="On"),
-                                SelectOptionDict(value="0", label="Off"),
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_ENABLE_STREAMING,
-                        default=_bool_val(
-                            CONF_ENABLE_STREAMING, DEFAULT_ENABLE_STREAMING
-                        ),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value="1", label="On (stream)"),
-                                SelectOptionDict(
-                                    value="0", label="Off (non-streaming)"
+                    # ── 👤 Profile & Model ──────────────────────────
+                    vol.Required("profile"): section(
+                        vol.Schema(
+                            {
+                                vol.Required(
+                                    CONF_NAME, default=default_name
+                                ): TextSelector(
+                                    TextSelectorConfig(type=TextSelectorType.TEXT)
                                 ),
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_RESPECT_EXPOSURE,
-                        default=_bool_val(
-                            CONF_RESPECT_EXPOSURE, DEFAULT_RESPECT_EXPOSURE
-                        ),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value="1", label="On (exposed only)"),
-                                SelectOptionDict(
-                                    value="0", label="Off (all entities)"
+                                vol.Required(
+                                    CONF_MODEL_NAME,
+                                    default=options.get(CONF_MODEL_NAME),
+                                ): SelectSelector(
+                                    SelectSelectorConfig(
+                                        options=[
+                                            SelectOptionDict(value=m, label=m)
+                                            for m in model_options
+                                        ],
+                                        mode=SelectSelectorMode.DROPDOWN,
+                                        sort=True,
+                                    )
                                 ),
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    # ── Home Assistant API & RAG ───────────────────
-                    vol.Optional(
-                        CONF_LLM_HASS_API,
-                        default=options.get(CONF_LLM_HASS_API),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=llm_api_options,
-                            mode=SelectSelectorMode.DROPDOWN,
-                            translation_key="llm_hass_api",
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_ENABLE_RAG,
-                        default=_bool_val(CONF_ENABLE_RAG, DEFAULT_ENABLE_RAG),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value="1", label="On"),
-                                SelectOptionDict(value="0", label="Off"),
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_RAG_TOP_K,
-                        default=options.get(CONF_RAG_TOP_K, DEFAULT_RAG_TOP_K),
-                    ): NumberSelector(
-                        NumberSelectorConfig(min=MIN_RAG_TOP_K, max=MAX_RAG_TOP_K, step=1, mode=NumberSelectorMode.BOX)
-                    ),
-                    # ── Follow-up & End Phrases ────────────────────
-                    vol.Optional(
-                        CONF_FOLLOW_UP_PHRASES,
-                        default=options.get(CONF_FOLLOW_UP_PHRASES, DEFAULT_FOLLOW_UP_PHRASES),
-                    ): TextSelector(
-                        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
-                    ),
-                    vol.Optional(
-                        CONF_END_WORDS,
-                        default=options.get(CONF_END_WORDS, DEFAULT_END_WORDS),
-                    ): TextSelector(
-                        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
-                    ),
-                    # ── Web Search (SearXNG, self-hosted) ──────────
-                    vol.Optional(
-                        CONF_ENABLE_WEB_SEARCH,
-                        default=_bool_val(
-                            CONF_ENABLE_WEB_SEARCH, DEFAULT_ENABLE_WEB_SEARCH
+                                vol.Optional(
+                                    CONF_SYSTEM_PROMPT,
+                                    default=options.get(
+                                        CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
+                                    ),
+                                ): TextSelector(
+                                    TextSelectorConfig(
+                                        type=TextSelectorType.TEXT, multiline=True
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_TECHNICAL_PROMPT,
+                                    default=options.get(CONF_TECHNICAL_PROMPT, ""),
+                                ): TextSelector(
+                                    TextSelectorConfig(
+                                        type=TextSelectorType.TEXT, multiline=True
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_TEMPERATURE,
+                                    default=options.get(
+                                        CONF_TEMPERATURE, DEFAULT_TEMPERATURE
+                                    ),
+                                ): NumberSelector(
+                                    NumberSelectorConfig(
+                                        min=MIN_TEMPERATURE,
+                                        max=MAX_TEMPERATURE,
+                                        step=0.1,
+                                        mode=NumberSelectorMode.SLIDER,
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_MAX_TOKENS,
+                                    default=options.get(
+                                        CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS
+                                    ),
+                                ): NumberSelector(
+                                    NumberSelectorConfig(
+                                        min=MIN_MAX_TOKENS,
+                                        max=MAX_MAX_TOKENS,
+                                        step=256,
+                                        mode=NumberSelectorMode.BOX,
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_MAX_HISTORY,
+                                    default=options.get(
+                                        CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY
+                                    ),
+                                ): NumberSelector(
+                                    NumberSelectorConfig(
+                                        min=MIN_MAX_HISTORY,
+                                        max=MAX_MAX_HISTORY,
+                                        step=1,
+                                        mode=NumberSelectorMode.BOX,
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_RESPONSE_MODE,
+                                    default=options.get(
+                                        CONF_RESPONSE_MODE, DEFAULT_RESPONSE_MODE
+                                    ),
+                                ): SelectSelector(
+                                    SelectSelectorConfig(
+                                        options=[
+                                            SelectOptionDict(
+                                                value="none",
+                                                label="None (pass-through)",
+                                            ),
+                                            SelectOptionDict(
+                                                value="default", label="Default"
+                                            ),
+                                            SelectOptionDict(
+                                                value="always",
+                                                label="Always respond",
+                                            ),
+                                        ],
+                                        mode=SelectSelectorMode.DROPDOWN,
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_CLEAN_RESPONSES,
+                                    default=_bool(
+                                        CONF_CLEAN_RESPONSES,
+                                        DEFAULT_CLEAN_RESPONSES,
+                                    ),
+                                ): BooleanSelector(),
+                                vol.Optional(
+                                    CONF_ENABLE_STREAMING,
+                                    default=_bool(
+                                        CONF_ENABLE_STREAMING,
+                                        DEFAULT_ENABLE_STREAMING,
+                                    ),
+                                ): BooleanSelector(),
+                            }
                         ),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(value="1", label="On"),
-                                SelectOptionDict(value="0", label="Off"),
-                            ],
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
+                        {"collapsed": False},
                     ),
-                    vol.Optional(
-                        CONF_SEARXNG_URL,
-                        default=options.get(
-                            CONF_SEARXNG_URL, DEFAULT_SEARXNG_URL
+                    # ── 🧠 Context ──────────────────────────────────
+                    vol.Required("context"): section(
+                        vol.Schema(
+                            {
+                                vol.Optional(
+                                    CONF_CONTEXT_TEMPLATES,
+                                    default="\n".join(
+                                        options.get(
+                                            CONF_CONTEXT_TEMPLATES,
+                                            DEFAULT_CONTEXT_TEMPLATES,
+                                        )
+                                    ),
+                                ): TextSelector(
+                                    TextSelectorConfig(
+                                        type=TextSelectorType.TEXT, multiline=True
+                                    )
+                                ),
+                            }
                         ),
-                    ): TextSelector(
-                        TextSelectorConfig(type=TextSelectorType.URL)
+                        {"collapsed": True},
                     ),
-                    vol.Optional(
-                        CONF_SEARXNG_ENGINES,
-                        default=options.get(
-                            CONF_SEARXNG_ENGINES, DEFAULT_SEARXNG_ENGINES
+                    # ── 🏠 Entities & Domains ───────────────────────
+                    vol.Required("entities"): section(
+                        vol.Schema(
+                            {
+                                vol.Optional(
+                                    CONF_ENABLED_DOMAINS,
+                                    default=options.get(
+                                        CONF_ENABLED_DOMAINS,
+                                        DEFAULT_ENABLED_DOMAINS,
+                                    ),
+                                ): cv.multi_select(SUPPORTED_DOMAINS),
+                                vol.Optional(
+                                    CONF_ENTITY_ALIASES,
+                                    default="\n".join(
+                                        f"{k}: {v}"
+                                        for k, v in options.get(
+                                            CONF_ENTITY_ALIASES,
+                                            DEFAULT_ENTITY_ALIASES,
+                                        ).items()
+                                    ),
+                                ): TextSelector(
+                                    TextSelectorConfig(
+                                        type=TextSelectorType.TEXT, multiline=True
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_MAX_ENTITIES_PER_DISCOVERY,
+                                    default=options.get(
+                                        CONF_MAX_ENTITIES_PER_DISCOVERY,
+                                        DEFAULT_MAX_ENTITIES_PER_DISCOVERY,
+                                    ),
+                                ): NumberSelector(
+                                    NumberSelectorConfig(
+                                        min=MIN_MAX_ENTITIES_PER_DISCOVERY,
+                                        max=MAX_MAX_ENTITIES_PER_DISCOVERY,
+                                        step=5,
+                                        mode=NumberSelectorMode.BOX,
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_RESPECT_EXPOSURE,
+                                    default=_bool(
+                                        CONF_RESPECT_EXPOSURE,
+                                        DEFAULT_RESPECT_EXPOSURE,
+                                    ),
+                                ): BooleanSelector(),
+                            }
                         ),
-                    ): TextSelector(
-                        TextSelectorConfig(type=TextSelectorType.TEXT)
+                        {"collapsed": True},
                     ),
-                    vol.Optional(
-                        CONF_SEARXNG_MAX_RESULTS,
-                        default=options.get(
-                            CONF_SEARXNG_MAX_RESULTS,
-                            DEFAULT_SEARXNG_MAX_RESULTS,
+                    # ── 🎛️ Control & Behaviour ─────────────────────
+                    vol.Required("behaviour"): section(
+                        vol.Schema(
+                            {
+                                vol.Optional(
+                                    CONF_CONTROL_HA,
+                                    default=_bool(
+                                        CONF_CONTROL_HA, DEFAULT_CONTROL_HA
+                                    ),
+                                ): BooleanSelector(),
+                                vol.Optional(
+                                    CONF_LLM_HASS_API,
+                                    default=options.get(CONF_LLM_HASS_API),
+                                ): SelectSelector(
+                                    SelectSelectorConfig(
+                                        options=llm_api_options,
+                                        mode=SelectSelectorMode.DROPDOWN,
+                                        translation_key="llm_hass_api",
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_CONFIRMATION_REQUIRED,
+                                    default=_bool(
+                                        CONF_CONFIRMATION_REQUIRED,
+                                        DEFAULT_CONFIRMATION_REQUIRED,
+                                    ),
+                                ): BooleanSelector(),
+                                vol.Optional(
+                                    CONF_EXPOSE_SCRIPTS,
+                                    default=_bool(
+                                        CONF_EXPOSE_SCRIPTS,
+                                        DEFAULT_EXPOSE_SCRIPTS,
+                                    ),
+                                ): BooleanSelector(),
+                                vol.Optional(
+                                    CONF_EXPOSE_SCENES,
+                                    default=_bool(
+                                        CONF_EXPOSE_SCENES,
+                                        DEFAULT_EXPOSE_SCENES,
+                                    ),
+                                ): BooleanSelector(),
+                                vol.Optional(
+                                    CONF_MAX_ITERATIONS,
+                                    default=options.get(
+                                        CONF_MAX_ITERATIONS,
+                                        DEFAULT_MAX_ITERATIONS,
+                                    ),
+                                ): NumberSelector(
+                                    NumberSelectorConfig(
+                                        min=MIN_MAX_ITERATIONS,
+                                        max=MAX_MAX_ITERATIONS,
+                                        step=1,
+                                        mode=NumberSelectorMode.BOX,
+                                    )
+                                ),
+                            }
                         ),
-                    ): NumberSelector(
-                        NumberSelectorConfig(
-                            min=MIN_SEARXNG_MAX_RESULTS,
-                            max=MAX_SEARXNG_MAX_RESULTS,
-                            step=1,
-                            mode=NumberSelectorMode.BOX,
-                        )
+                        {"collapsed": True},
                     ),
-                    # ── Timeouts & Retries ─────────────────────────
-                    vol.Optional(
-                        CONF_REQUEST_TIMEOUT,
-                        default=options.get(CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT),
-                    ): NumberSelector(
-                        NumberSelectorConfig(min=MIN_REQUEST_TIMEOUT, max=MAX_REQUEST_TIMEOUT, step=5, mode=NumberSelectorMode.BOX)
+                    # ── 🌐 Web Search (SearXNG) ─────────────────────
+                    vol.Required("web_search"): section(
+                        vol.Schema(
+                            {
+                                vol.Optional(
+                                    CONF_ENABLE_WEB_SEARCH,
+                                    default=_bool(
+                                        CONF_ENABLE_WEB_SEARCH,
+                                        DEFAULT_ENABLE_WEB_SEARCH,
+                                    ),
+                                ): BooleanSelector(),
+                                vol.Optional(
+                                    CONF_SEARXNG_URL,
+                                    default=options.get(
+                                        CONF_SEARXNG_URL, DEFAULT_SEARXNG_URL
+                                    ),
+                                ): TextSelector(
+                                    TextSelectorConfig(type=TextSelectorType.URL)
+                                ),
+                                vol.Optional(
+                                    CONF_SEARXNG_ENGINES,
+                                    default=options.get(
+                                        CONF_SEARXNG_ENGINES,
+                                        DEFAULT_SEARXNG_ENGINES,
+                                    ),
+                                ): TextSelector(
+                                    TextSelectorConfig(type=TextSelectorType.TEXT)
+                                ),
+                                vol.Optional(
+                                    CONF_SEARXNG_MAX_RESULTS,
+                                    default=options.get(
+                                        CONF_SEARXNG_MAX_RESULTS,
+                                        DEFAULT_SEARXNG_MAX_RESULTS,
+                                    ),
+                                ): NumberSelector(
+                                    NumberSelectorConfig(
+                                        min=MIN_SEARXNG_MAX_RESULTS,
+                                        max=MAX_SEARXNG_MAX_RESULTS,
+                                        step=1,
+                                        mode=NumberSelectorMode.BOX,
+                                    )
+                                ),
+                            }
+                        ),
+                        {"collapsed": True},
                     ),
-                    vol.Optional(
-                        CONF_CONNECT_TIMEOUT,
-                        default=options.get(CONF_CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT),
-                    ): NumberSelector(
-                        NumberSelectorConfig(min=MIN_CONNECT_TIMEOUT, max=MAX_CONNECT_TIMEOUT, step=1, mode=NumberSelectorMode.BOX)
+                    # ── 📚 RAG ──────────────────────────────────────
+                    vol.Required("rag"): section(
+                        vol.Schema(
+                            {
+                                vol.Optional(
+                                    CONF_ENABLE_RAG,
+                                    default=_bool(
+                                        CONF_ENABLE_RAG, DEFAULT_ENABLE_RAG
+                                    ),
+                                ): BooleanSelector(),
+                                vol.Optional(
+                                    CONF_RAG_TOP_K,
+                                    default=options.get(
+                                        CONF_RAG_TOP_K, DEFAULT_RAG_TOP_K
+                                    ),
+                                ): NumberSelector(
+                                    NumberSelectorConfig(
+                                        min=MIN_RAG_TOP_K,
+                                        max=MAX_RAG_TOP_K,
+                                        step=1,
+                                        mode=NumberSelectorMode.BOX,
+                                    )
+                                ),
+                            }
+                        ),
+                        {"collapsed": True},
                     ),
-                    vol.Optional(
-                        CONF_FIRST_DELTA_TIMEOUT,
-                        default=options.get(CONF_FIRST_DELTA_TIMEOUT, DEFAULT_FIRST_DELTA_TIMEOUT),
-                    ): NumberSelector(
-                        NumberSelectorConfig(min=MIN_FIRST_DELTA_TIMEOUT, max=MAX_FIRST_DELTA_TIMEOUT, step=1, mode=NumberSelectorMode.BOX)
+                    # ── 💬 Follow-up ────────────────────────────────
+                    vol.Required("follow_up"): section(
+                        vol.Schema(
+                            {
+                                vol.Optional(
+                                    CONF_FOLLOW_UP_PHRASES,
+                                    default=options.get(
+                                        CONF_FOLLOW_UP_PHRASES,
+                                        DEFAULT_FOLLOW_UP_PHRASES,
+                                    ),
+                                ): TextSelector(
+                                    TextSelectorConfig(
+                                        type=TextSelectorType.TEXT, multiline=True
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_END_WORDS,
+                                    default=options.get(
+                                        CONF_END_WORDS, DEFAULT_END_WORDS
+                                    ),
+                                ): TextSelector(
+                                    TextSelectorConfig(
+                                        type=TextSelectorType.TEXT, multiline=True
+                                    )
+                                ),
+                            }
+                        ),
+                        {"collapsed": True},
                     ),
-                    vol.Optional(
-                        CONF_MAX_RETRIES,
-                        default=options.get(CONF_MAX_RETRIES, DEFAULT_MAX_RETRIES),
-                    ): NumberSelector(
-                        NumberSelectorConfig(min=MIN_MAX_RETRIES, max=MAX_MAX_RETRIES, step=1, mode=NumberSelectorMode.BOX)
-                    ),
-                    vol.Optional(
-                        CONF_RETRY_BACKOFF,
-                        default=options.get(CONF_RETRY_BACKOFF, DEFAULT_RETRY_BACKOFF),
-                    ): NumberSelector(
-                        NumberSelectorConfig(min=MIN_RETRY_BACKOFF, max=MAX_RETRY_BACKOFF, step=0.5, mode=NumberSelectorMode.BOX)
+                    # ── ⚙️ Advanced ─────────────────────────────────
+                    vol.Required("advanced"): section(
+                        vol.Schema(
+                            {
+                                vol.Optional(
+                                    CONF_DEBUG_MODE,
+                                    default=_bool(
+                                        CONF_DEBUG_MODE, DEFAULT_DEBUG_MODE
+                                    ),
+                                ): BooleanSelector(),
+                                vol.Optional(
+                                    CONF_REQUEST_TIMEOUT,
+                                    default=options.get(
+                                        CONF_REQUEST_TIMEOUT,
+                                        DEFAULT_REQUEST_TIMEOUT,
+                                    ),
+                                ): NumberSelector(
+                                    NumberSelectorConfig(
+                                        min=MIN_REQUEST_TIMEOUT,
+                                        max=MAX_REQUEST_TIMEOUT,
+                                        step=5,
+                                        mode=NumberSelectorMode.BOX,
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_CONNECT_TIMEOUT,
+                                    default=options.get(
+                                        CONF_CONNECT_TIMEOUT,
+                                        DEFAULT_CONNECT_TIMEOUT,
+                                    ),
+                                ): NumberSelector(
+                                    NumberSelectorConfig(
+                                        min=MIN_CONNECT_TIMEOUT,
+                                        max=MAX_CONNECT_TIMEOUT,
+                                        step=1,
+                                        mode=NumberSelectorMode.BOX,
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_FIRST_DELTA_TIMEOUT,
+                                    default=options.get(
+                                        CONF_FIRST_DELTA_TIMEOUT,
+                                        DEFAULT_FIRST_DELTA_TIMEOUT,
+                                    ),
+                                ): NumberSelector(
+                                    NumberSelectorConfig(
+                                        min=MIN_FIRST_DELTA_TIMEOUT,
+                                        max=MAX_FIRST_DELTA_TIMEOUT,
+                                        step=1,
+                                        mode=NumberSelectorMode.BOX,
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_MAX_RETRIES,
+                                    default=options.get(
+                                        CONF_MAX_RETRIES, DEFAULT_MAX_RETRIES
+                                    ),
+                                ): NumberSelector(
+                                    NumberSelectorConfig(
+                                        min=MIN_MAX_RETRIES,
+                                        max=MAX_MAX_RETRIES,
+                                        step=1,
+                                        mode=NumberSelectorMode.BOX,
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_RETRY_BACKOFF,
+                                    default=options.get(
+                                        CONF_RETRY_BACKOFF, DEFAULT_RETRY_BACKOFF
+                                    ),
+                                ): NumberSelector(
+                                    NumberSelectorConfig(
+                                        min=MIN_RETRY_BACKOFF,
+                                        max=MAX_RETRY_BACKOFF,
+                                        step=0.5,
+                                        mode=NumberSelectorMode.BOX,
+                                    )
+                                ),
+                            }
+                        ),
+                        {"collapsed": True},
                     ),
                 }
             ),

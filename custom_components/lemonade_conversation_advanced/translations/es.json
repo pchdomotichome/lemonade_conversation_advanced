@@ -118,6 +118,16 @@
           "first_delta_timeout": "Espera máxima del primer token en streaming (cae a modo sin streaming si se excede).",
           "max_retries": "Intentos de reintento ante fallo de conexión.",
           "retry_backoff": "Segundos base de espera entre reintentos (exponencial)."
+          },
+          "sections": {
+            "profile": { "name": "👤 Perfil y Modelo", "description": "Nombre, modelo y parámetros de generación." },
+            "context": { "name": "🧠 Contexto", "description": "Contexto dinámico inyectado mediante plantillas Jinja2." },
+            "entities": { "name": "🏠 Entidades y Dominios", "description": "Qué entidades y dominios puede ver y controlar el asistente." },
+            "behaviour": { "name": "🎛️ Control y Comportamiento", "description": "Control de Home Assistant, confirmación y exposición de herramientas." },
+            "web_search": { "name": "🌐 Búsqueda web", "description": "Búsqueda web auto-alojada mediante SearXNG." },
+            "rag": { "name": "📚 RAG", "description": "Contexto aumentado por recuperación desde el índice local." },
+            "follow_up": { "name": "💬 Seguimiento", "description": "Frases de seguimiento y de fin de conversación." },
+            "advanced": { "name": "⚙️ Avanzado", "description": "Depuración, tiempos de espera y reintentos." }
           }
         }
       }

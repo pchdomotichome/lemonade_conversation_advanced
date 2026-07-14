@@ -118,6 +118,16 @@
           "first_delta_timeout": "Max wait for the first streamed token (falls back to non-streaming if exceeded).",
           "max_retries": "Retry attempts on connection failure.",
           "retry_backoff": "Base backoff seconds between retries (exponential)."
+          },
+          "sections": {
+            "profile": { "name": "👤 Profile & Model", "description": "Name, model and generation parameters." },
+            "context": { "name": "🧠 Context", "description": "Dynamic context injected via Jinja2 templates." },
+            "entities": { "name": "🏠 Entities & Domains", "description": "Which entities and domains the assistant can see and control." },
+            "behaviour": { "name": "🎛️ Control & Behaviour", "description": "Home Assistant control, confirmation and tool exposure." },
+            "web_search": { "name": "🌐 Web Search", "description": "Self-hosted web search via SearXNG." },
+            "rag": { "name": "📚 RAG", "description": "Retrieval-augmented context from the local index." },
+            "follow_up": { "name": "💬 Follow-up", "description": "Follow-up and end-of-conversation phrases." },
+            "advanced": { "name": "⚙️ Advanced", "description": "Debug, timeouts and retries." }
           }
         }
       }
