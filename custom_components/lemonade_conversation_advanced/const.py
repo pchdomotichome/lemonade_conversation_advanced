@@ -62,6 +62,12 @@ CONF_CONFIRMATION_REQUIRED = "confirmation_required"
 CONF_CUSTOM_SCRIPTS = "custom_scripts"
 CONF_CUSTOM_SCENES = "custom_scenes"
 
+# Web search (local, self-hosted via SearXNG)
+CONF_ENABLE_WEB_SEARCH = "enable_web_search"
+CONF_SEARXNG_URL = "searxng_url"
+CONF_SEARXNG_ENGINES = "searxng_engines"
+CONF_SEARXNG_MAX_RESULTS = "searxng_max_results"
+
 # Default values
 DEFAULT_SERVER_TYPE = "lmstudio"
 DEFAULT_LEMONADE_URL = "http://localhost:1234"
@@ -136,6 +142,14 @@ DEFAULT_ENTITY_ALIASES: Final[dict[str, str]] = {}
 DEFAULT_CONFIRMATION_REQUIRED = False
 DEFAULT_CUSTOM_SCRIPTS: Final[dict[str, dict[str, Any]]] = {}
 DEFAULT_CUSTOM_SCENES: Final[dict[str, dict[str, Any]]] = {}
+
+# Web search (SearXNG) defaults
+DEFAULT_ENABLE_WEB_SEARCH: Final[bool] = False
+DEFAULT_SEARXNG_URL: Final[str] = ""
+DEFAULT_SEARXNG_ENGINES: Final[str] = ""
+DEFAULT_SEARXNG_MAX_RESULTS: Final[int] = 5
+MIN_SEARXNG_MAX_RESULTS: Final[int] = 1
+MAX_SEARXNG_MAX_RESULTS: Final[int] = 20
 
 # Limits for config flow selectors
 MIN_TEMPERATURE: Final = 0.0

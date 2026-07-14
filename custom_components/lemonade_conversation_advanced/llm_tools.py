@@ -11,7 +11,17 @@ from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.core import HomeAssistant
 from homeassistant.util.json import JsonObjectType
 
-from .const import DOMAIN
+from .const import (
+    CONF_ENABLE_WEB_SEARCH,
+    CONF_SEARXNG_ENGINES,
+    CONF_SEARXNG_MAX_RESULTS,
+    CONF_SEARXNG_URL,
+    DEFAULT_SEARXNG_ENGINES,
+    DEFAULT_SEARXNG_MAX_RESULTS,
+    DEFAULT_SEARXNG_URL,
+    DOMAIN,
+)
+from .web_search import WebSearchTool
 
 
 # Tool implementations as llm.Tool subclasses
@@ -272,7 +282,7 @@ async def async_get_tools(
     if api_id != DOMAIN:
         return None
 
-    return [
+    tools: list[llm.Tool] = [
         GetEntityStateTool(),
         TurnOnEntityTool(),
         TurnOffEntityTool(),
@@ -280,3 +290,36 @@ async def async_get_tools(
         SetEntityValueTool(),
         GetEntitiesInAreaTool(),
     ]
+
+    web_search_tool = _build_web_search_tool(hass)
+    if web_search_tool is not None:
+        tools.append(web_search_tool)
+
+    return tools
+
+
+def _build_web_search_tool(hass: HomeAssistant) -> WebSearchTool | None:
+    """Build the web_search tool if any agent has SearXNG enabled and configured."""
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        for subentry in entry.subentries.values():
+            if subentry.subentry_type != "conversation":
+                continue
+            data = subentry.data
+            enabled = data.get(CONF_ENABLE_WEB_SEARCH, False)
+            if isinstance(enabled, str):
+                enabled = enabled in ("1", "true", "yes", "on")
+            base_url = data.get(CONF_SEARXNG_URL, DEFAULT_SEARXNG_URL)
+            if enabled and base_url:
+                return WebSearchTool(
+                    base_url,
+                    engines=data.get(
+                        CONF_SEARXNG_ENGINES, DEFAULT_SEARXNG_ENGINES
+                    ),
+                    max_results=int(
+                        data.get(
+                            CONF_SEARXNG_MAX_RESULTS,
+                            DEFAULT_SEARXNG_MAX_RESULTS,
+                        )
+                    ),
+                )
+    return None

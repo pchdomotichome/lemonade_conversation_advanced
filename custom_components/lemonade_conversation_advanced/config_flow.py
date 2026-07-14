@@ -39,8 +39,12 @@ from .const import (
     CONF_ENABLE_RAG,
     CONF_ENABLE_STREAMING,
     CONF_ENABLED_DOMAINS,
+    CONF_ENABLE_WEB_SEARCH,
     CONF_ENTITY_ALIASES,
     CONF_RESPECT_EXPOSURE,
+    CONF_SEARXNG_ENGINES,
+    CONF_SEARXNG_MAX_RESULTS,
+    CONF_SEARXNG_URL,
     CONF_FIRST_DELTA_TIMEOUT,
     CONF_FOLLOW_UP_PHRASES,
     CONF_LLM_HASS_API,
@@ -66,8 +70,12 @@ from .const import (
     DEFAULT_END_WORDS,
     DEFAULT_ENABLE_RAG,
     DEFAULT_ENABLED_DOMAINS,
+    DEFAULT_ENABLE_WEB_SEARCH,
     DEFAULT_ENTITY_ALIASES,
     DEFAULT_ENABLE_STREAMING,
+    DEFAULT_SEARXNG_ENGINES,
+    DEFAULT_SEARXNG_MAX_RESULTS,
+    DEFAULT_SEARXNG_URL,
     DEFAULT_FIRST_DELTA_TIMEOUT,
     DEFAULT_FOLLOW_UP_PHRASES,
     DEFAULT_MAX_HISTORY,
@@ -87,6 +95,8 @@ from .const import (
     DOMAIN,
     MAX_MAX_ENTITIES_PER_DISCOVERY,
     MIN_MAX_ENTITIES_PER_DISCOVERY,
+    MAX_SEARXNG_MAX_RESULTS,
+    MIN_SEARXNG_MAX_RESULTS,
     SUPPORTED_DOMAINS,
     MAX_CONNECT_TIMEOUT,
     MAX_FIRST_DELTA_TIMEOUT,
@@ -136,6 +146,10 @@ DEFAULT_CONVERSATION_DATA = {
     CONF_RETRY_BACKOFF: DEFAULT_RETRY_BACKOFF,
     CONF_ENABLE_STREAMING: DEFAULT_ENABLE_STREAMING,
     CONF_RESPECT_EXPOSURE: DEFAULT_RESPECT_EXPOSURE,
+    CONF_ENABLE_WEB_SEARCH: DEFAULT_ENABLE_WEB_SEARCH,
+    CONF_SEARXNG_URL: DEFAULT_SEARXNG_URL,
+    CONF_SEARXNG_ENGINES: DEFAULT_SEARXNG_ENGINES,
+    CONF_SEARXNG_MAX_RESULTS: DEFAULT_SEARXNG_MAX_RESULTS,
 }
 
 DEFAULT_AI_TASK_DATA = {
@@ -379,6 +393,7 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                 CONF_CLEAN_RESPONSES,
                 CONF_ENABLE_STREAMING,
                 CONF_RESPECT_EXPOSURE,
+                CONF_ENABLE_WEB_SEARCH,
             ):
                 if key in user_input:
                     user_input[key] = user_input[key] in ("1", True, "true")
@@ -414,6 +429,15 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                 except (ValueError, TypeError):
                     user_input[CONF_MAX_ENTITIES_PER_DISCOVERY] = (
                         DEFAULT_MAX_ENTITIES_PER_DISCOVERY
+                    )
+            if CONF_SEARXNG_MAX_RESULTS in user_input:
+                try:
+                    user_input[CONF_SEARXNG_MAX_RESULTS] = int(
+                        user_input[CONF_SEARXNG_MAX_RESULTS]
+                    )
+                except (ValueError, TypeError):
+                    user_input[CONF_SEARXNG_MAX_RESULTS] = (
+                        DEFAULT_SEARXNG_MAX_RESULTS
                     )
             title = user_input.get(CONF_MODEL_NAME, "Lemonade")
             if self._is_new:
@@ -668,6 +692,51 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                         default=options.get(CONF_END_WORDS, DEFAULT_END_WORDS),
                     ): TextSelector(
                         TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+                    ),
+                    # ── Web Search (SearXNG, self-hosted) ──────────
+                    vol.Optional(
+                        CONF_ENABLE_WEB_SEARCH,
+                        default=_bool_val(
+                            CONF_ENABLE_WEB_SEARCH, DEFAULT_ENABLE_WEB_SEARCH
+                        ),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value="1", label="On"),
+                                SelectOptionDict(value="0", label="Off"),
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_SEARXNG_URL,
+                        default=options.get(
+                            CONF_SEARXNG_URL, DEFAULT_SEARXNG_URL
+                        ),
+                    ): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.URL)
+                    ),
+                    vol.Optional(
+                        CONF_SEARXNG_ENGINES,
+                        default=options.get(
+                            CONF_SEARXNG_ENGINES, DEFAULT_SEARXNG_ENGINES
+                        ),
+                    ): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.TEXT)
+                    ),
+                    vol.Optional(
+                        CONF_SEARXNG_MAX_RESULTS,
+                        default=options.get(
+                            CONF_SEARXNG_MAX_RESULTS,
+                            DEFAULT_SEARXNG_MAX_RESULTS,
+                        ),
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=MIN_SEARXNG_MAX_RESULTS,
+                            max=MAX_SEARXNG_MAX_RESULTS,
+                            step=1,
+                            mode=NumberSelectorMode.BOX,
+                        )
                     ),
                     # ── Timeouts & Retries ─────────────────────────
                     vol.Optional(
