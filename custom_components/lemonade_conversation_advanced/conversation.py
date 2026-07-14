@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import template as template_helper
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.llm import ToolInput
 from voluptuous_openapi import convert
@@ -29,13 +30,17 @@ from .exceptions import (
 from .const import (
     CONF_CLEAN_RESPONSES,
     CONF_CONNECT_TIMEOUT,
+    CONF_CONTEXT_TEMPLATES,
     CONF_CONTROL_HA,
     CONF_DEBUG_MODE,
     CONF_ENABLE_RAG,
+    CONF_ENABLED_DOMAINS,
+    CONF_ENTITY_ALIASES,
     CONF_ENABLE_STREAMING,
     CONF_END_WORDS,
     CONF_FIRST_DELTA_TIMEOUT,
     CONF_FOLLOW_UP_PHRASES,
+    CONF_MAX_ENTITIES_PER_DISCOVERY,
     CONF_MAX_HISTORY,
     CONF_MAX_ITERATIONS,
     CONF_MAX_RETRIES,
@@ -49,13 +54,17 @@ from .const import (
     CONF_SYSTEM_PROMPT,
     CONF_TECHNICAL_PROMPT,
     CONF_TEMPERATURE,
+    DEFAULT_CONTEXT_TEMPLATES,
     DEFAULT_CLEAN_RESPONSES,
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_CONTROL_HA,
     DEFAULT_DEBUG_MODE,
     DEFAULT_ENABLE_RAG,
+    DEFAULT_ENABLED_DOMAINS,
+    DEFAULT_ENTITY_ALIASES,
     DEFAULT_ENABLE_STREAMING,
     DEFAULT_FIRST_DELTA_TIMEOUT,
+    DEFAULT_MAX_ENTITIES_PER_DISCOVERY,
     DEFAULT_MAX_HISTORY,
     DEFAULT_MAX_ITERATIONS,
     DEFAULT_MAX_RETRIES,
@@ -214,6 +223,15 @@ class LemonadeConversationEntity(
                     conversation.SystemContent(content=summary)
                 )
 
+        # Render user-defined Jinja2 context templates as dynamic context.
+        templates = options.get(CONF_CONTEXT_TEMPLATES, DEFAULT_CONTEXT_TEMPLATES)
+        if templates:
+            rendered = await self._render_context_templates(templates)
+            if rendered:
+                chat_log.content.append(
+                    conversation.SystemContent(content=rendered)
+                )
+
         # Instruct LLM not to call GetLiveContext — states are already in context
         chat_log.content.append(
             conversation.SystemContent(
@@ -225,6 +243,35 @@ class LemonadeConversationEntity(
                 )
             )
         )
+
+    async def _render_context_templates(
+        self, templates: list[str]
+    ) -> str:
+        """Render Jinja2 context templates and join them as a context block.
+
+        Each template is rendered with the Home Assistant template engine and
+        the result is injected as dynamic context for the LLM.
+        """
+        rendered_lines: list[str] = []
+        for tpl_text in templates:
+            tpl_text = (tpl_text or "").strip()
+            if not tpl_text:
+                continue
+            try:
+                tpl = template_helper.Template(tpl_text, self.hass)
+                value = tpl.async_render()
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning(
+                    "Failed to render context template %r: %s", tpl_text, err
+                )
+                continue
+            if value is not None and str(value).strip():
+                rendered_lines.append(f"- {tpl_text} => {value}")
+
+        if not rendered_lines:
+            return ""
+
+        return "## Dynamic Context (from templates)\n" + "\n".join(rendered_lines)
 
     @override
     async def _async_handle_message(
@@ -460,8 +507,19 @@ class LemonadeConversationEntity(
                 CONF_RESPECT_EXPOSURE, DEFAULT_RESPECT_EXPOSURE
             )
         )
+        enabled_domains = self.subentry.data.get(
+            CONF_ENABLED_DOMAINS, DEFAULT_ENABLED_DOMAINS
+        )
+        enabled_domains_set = (
+            set(enabled_domains) if enabled_domains else set()
+        )
+        entity_aliases = self.subentry.data.get(
+            CONF_ENTITY_ALIASES, DEFAULT_ENTITY_ALIASES
+        )
 
         def _should_inject(e: er.RegistryEntry) -> bool:
+            if enabled_domains_set and e.domain not in enabled_domains_set:
+                return False
             if not respect_exposure:
                 return True
             return async_should_expose(
@@ -521,6 +579,9 @@ class LemonadeConversationEntity(
                     or entity_entry.original_name
                     or entity_entry.entity_id
                 )
+                alias = entity_aliases.get(entity_entry.entity_id)
+                if alias:
+                    friendly = f"{friendly} ({alias})"
                 entity_context += self._format_entity_state(
                     entity_entry.entity_id, friendly, state_obj
                 )

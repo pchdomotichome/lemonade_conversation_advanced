@@ -1,6 +1,6 @@
 """Constants for the Lemonade Conversation Advanced integration."""
 
-from typing import Final
+from typing import Any, Final
 
 DOMAIN: Final = "lemonade_conversation_advanced"
 SYSTEM_ENTRY_UNIQUE_ID = "lemonade_conversation_advanced_system_settings"
@@ -53,6 +53,14 @@ CONF_ENABLE_STREAMING = "enable_streaming"
 CONF_RESPECT_EXPOSURE = "respect_exposure"
 CONF_TIMEOUT = "timeout"
 CONF_LLM_HASS_API = "llm_hass_api"
+
+# Context & entity customization
+CONF_CONTEXT_TEMPLATES = "context_templates"
+CONF_ENABLED_DOMAINS = "enabled_domains"
+CONF_ENTITY_ALIASES = "entity_aliases"
+CONF_CONFIRMATION_REQUIRED = "confirmation_required"
+CONF_CUSTOM_SCRIPTS = "custom_scripts"
+CONF_CUSTOM_SCENES = "custom_scenes"
 
 # Default values
 DEFAULT_SERVER_TYPE = "lmstudio"
@@ -107,6 +115,28 @@ DEFAULT_END_WORDS = "stop, cancel, no, nope, thanks, thank you, bye, goodbye, do
 DEFAULT_CLEAN_RESPONSES = False
 DEFAULT_TIMEOUT = 30
 
+# Context & entity customization defaults
+DEFAULT_CONTEXT_TEMPLATES: Final[list[str]] = [
+    "Hora actual: {{ now().strftime('%H:%M') }}",
+    "Fecha actual: {{ now().strftime('%d/%m/%Y') }}",
+]
+DEFAULT_ENABLED_DOMAINS: Final[list[str]] = [
+    "light",
+    "switch",
+    "climate",
+    "cover",
+    "fan",
+    "media_player",
+    "lock",
+    "vacuum",
+    "scene",
+    "script",
+]
+DEFAULT_ENTITY_ALIASES: Final[dict[str, str]] = {}
+DEFAULT_CONFIRMATION_REQUIRED = False
+DEFAULT_CUSTOM_SCRIPTS: Final[dict[str, dict[str, Any]]] = {}
+DEFAULT_CUSTOM_SCENES: Final[dict[str, dict[str, Any]]] = {}
+
 # Limits for config flow selectors
 MIN_TEMPERATURE: Final = 0.0
 MAX_TEMPERATURE: Final = 2.0
@@ -153,6 +183,34 @@ MAX_ENTITIES_PER_DISCOVERY = 50  # Default, can be overridden in system settings
 MAX_DISCOVERY_RESULTS = 100
 CONF_MAX_ENTITIES_PER_DISCOVERY = "max_entities_per_discovery"
 DEFAULT_MAX_ENTITIES_PER_DISCOVERY = 50
+MIN_MAX_ENTITIES_PER_DISCOVERY: Final = 20
+MAX_MAX_ENTITIES_PER_DISCOVERY: Final = 500
+
+# Common Home Assistant domains for the enabled_domains filter
+SUPPORTED_DOMAINS: Final[dict[str, str]] = {
+    "light": "Lights",
+    "switch": "Switches",
+    "climate": "Climate",
+    "cover": "Covers/Blinds",
+    "fan": "Fans",
+    "media_player": "Media Players",
+    "lock": "Locks",
+    "vacuum": "Vacuums",
+    "scene": "Scenes",
+    "script": "Scripts",
+    "sensor": "Sensors",
+    "binary_sensor": "Binary Sensors",
+    "camera": "Cameras",
+    "humidifier": "Humidifiers",
+    "number": "Numbers",
+    "input_boolean": "Input Booleans",
+    "input_number": "Input Numbers",
+    "input_select": "Input Selects",
+    "input_text": "Input Texts",
+    "timer": "Timers",
+    "alarm_control_panel": "Alarm Panels",
+    "water_heater": "Water Heaters",
+}
 
 RESPONSE_MODE_INSTRUCTIONS = {
     "none": """## Follow-up Questions

@@ -1,0 +1,314 @@
+{
+  "title": "Lemonade Conversation Advanced",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Conectar al servidor Lemonade",
+        "description": "Introduce la URL del servidor Lemonade y la clave API opcional.",
+        "data": {
+          "server_url": "URL del servidor",
+          "api_key": "Clave API (opcional)"
+        }
+      },
+      "config": {
+        "title": "Modelo y parámetros",
+        "description": "Selecciona el modelo predeterminado y configura los parámetros de generación.",
+        "data": {
+          "default_model": "Modelo predeterminado",
+          "temperature": "Temperatura (creatividad)",
+          "top_p": "Top P (muestreo núcleo)",
+          "top_k": "Top K (diversidad)",
+          "max_tokens": "Máximo de tokens",
+          "streaming": "Activar streaming",
+          "prompt": "Prompt del sistema",
+          "timeout": "Tiempo de espera (segundos)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "No se pudo conectar al servidor Lemonade",
+      "invalid_auth": "Clave API inválida",
+      "no_models": "No hay modelos disponibles"
+    },
+    "abort": {
+      "already_configured": "Este servidor ya está configurado"
+    }
+  },
+  "options": {
+    "step": {
+      "set_options": {
+        "title": "Lemonade Conversation Advanced",
+        "description": "Configura el modelo, el contexto, el comportamiento y los tiempos de espera de este agente.",
+        "data": {
+          "model_name": "Modelo",
+          "system_prompt": "Prompt del sistema",
+          "technical_prompt": "Instrucciones técnicas",
+          "context_templates": "Plantillas de contexto (Jinja2)",
+          "enabled_domains": "Dominios habilitados",
+          "entity_aliases": "Alias de entidades",
+          "max_entities_per_discovery": "Máx. entidades por descubrimiento",
+          "temperature": "Temperatura (creatividad)",
+          "max_tokens": "Máx. tokens de respuesta",
+          "max_history": "Mensajes de historial máx.",
+          "response_mode": "Modo de respuesta",
+          "clean_responses": "Limpiar respuestas (salida de voz)",
+          "control_home_assistant": "Controlar Home Assistant",
+          "max_iterations": "Máx. iteraciones de herramientas",
+          "debug_mode": "Modo depuración",
+          "enable_streaming": "Activar streaming",
+          "respect_exposure": "Respetar exposición de entidades",
+          "llm_hass_api": "API LLM de Home Assistant",
+          "enable_rag": "Activar RAG",
+          "rag_top_k": "RAG Top K",
+          "follow_up_phrases": "Frases de seguimiento",
+          "end_words": "Palabras para terminar",
+          "request_timeout": "Tiempo de espera de petición (s)",
+          "connect_timeout": "Tiempo de espera de conexión (s)",
+          "first_delta_timeout": "Tiempo de primer token (s)",
+          "max_retries": "Máx. reintentos",
+          "retry_backoff": "Espera entre reintentos (s)"
+        },
+        "data_description": {
+          "model_name": "Modelo LLM cargado en el servidor Lemonade.",
+          "system_prompt": "Instrucciones base de personalidad y comportamiento del asistente.",
+          "technical_prompt": "Instrucciones internas de razonamiento y uso de herramientas. Admite marcadores: {time}, {date}, {current_area}, {index}, {response_mode}.",
+          "context_templates": "Una plantilla Jinja2 por línea. Cada una se renderiza e inyecta como contexto dinámico (p. ej. 'Hora: {{ now().strftime(\"%H:%M\") }}').",
+          "enabled_domains": "Limita qué dominios puede ver y controlar el LLM.",
+          "entity_aliases": "Uno por línea, formato: entity_id: alias (p. ej. 'light.bedside: luz de mesita').",
+          "max_entities_per_discovery": "Tope de entidades devueltas por llamada de descubrimiento (20-500).",
+          "temperature": "0 = determinista, 2 = muy creativo.",
+          "max_tokens": "Longitud máxima de la respuesta generada.",
+          "max_history": "Número de turnos recientes de conversación a conservar como contexto.",
+          "response_mode": "Controla las preguntas de seguimiento y el fin de la conversación.",
+          "clean_responses": "Elimina emojis y caracteres especiales para una salida limpia de texto a voz.",
+          "control_home_assistant": "Permite al LLM llamar a herramientas de Home Assistant para controlar dispositivos.",
+          "max_iterations": "Número máximo de bucles de llamadas a herramientas por respuesta.",
+          "debug_mode": "Registra prompts y llamadas a herramientas detalladas en el registro de Home Assistant.",
+          "enable_streaming": "Envía la respuesta token a token. Desmarca para depurar el modo sin streaming.",
+          "respect_exposure": "Solo accede a las entidades expuestas a este asistente (predeterminado de Home Assistant).",
+          "llm_hass_api": "Qué API LLM de Home Assistant expone herramientas a este agente.",
+          "enable_rag": "Recupera contexto del hogar del índice RAG local para responder preguntas.",
+          "rag_top_k": "Número de fragmentos de contexto recuperados para RAG.",
+          "follow_up_phrases": "Frases separadas por comas que el LLM puede usar para continuar la conversación.",
+          "end_words": "Palabras separadas por comas que el usuario puede decir para terminar la conversación.",
+          "request_timeout": "Tiempo de espera total de la petición HTTP.",
+          "connect_timeout": "Tiempo de espera de conexión TCP.",
+          "first_delta_timeout": "Espera máxima del primer token en streaming (cae a modo sin streaming si se excede).",
+          "max_retries": "Intentos de reintento ante fallo de conexión.",
+          "retry_backoff": "Segundos base de espera entre reintentos (exponencial)."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "lemonade_health": {
+        "name": "Estado del servidor Lemonade",
+        "state": {
+          "healthy": "Saludable",
+          "unhealthy": "No saludable",
+          "unknown": "Desconocido"
+        }
+      },
+      "lemonade_loaded_model": {
+        "name": "Modelo cargado"
+      },
+      "lemonade_vram_usage": {
+        "name": "Uso de VRAM"
+      },
+      "lemonade_npu_usage": {
+        "name": "Uso de NPU"
+      },
+      "lemonade_model_count": {
+        "name": "Número de modelos"
+      },
+      "lemonade_inference_speed": {
+        "name": "Velocidad de inferencia"
+      }
+    }
+  },
+  "services": {
+    "load_model": {
+      "name": "Cargar modelo",
+      "description": "Carga un modelo en memoria",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Entrada de configuración a usar"
+        },
+        "model_name": {
+          "name": "Nombre del modelo",
+          "description": "Nombre del modelo a cargar"
+        },
+        "ctx_size": {
+          "name": "Tamaño de contexto",
+          "description": "Tamaño de la ventana de contexto"
+        },
+        "gpu_layers": {
+          "name": "Capas GPU",
+          "description": "Número de capas a descargar en la GPU"
+        },
+        "backend": {
+          "name": "Backend",
+          "description": "Backend a usar"
+        }
+      }
+    },
+    "unload_model": {
+      "name": "Descargar modelo",
+      "description": "Descarta un modelo de la memoria",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Entrada de configuración a usar"
+        },
+        "model_name": {
+          "name": "Nombre del modelo",
+          "description": "Nombre del modelo a descargar (usa 'all' para todos)"
+        }
+      }
+    },
+    "pull_model": {
+      "name": "Descargar modelo",
+      "description": "Descarga un modelo del registro",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Entrada de configuración a usar"
+        },
+        "model_name": {
+          "name": "Nombre del modelo",
+          "description": "Nombre del modelo a descargar"
+        },
+        "checkpoint": {
+          "name": "Punto de control",
+          "description": "Rama o punto de control específico"
+        },
+        "recipe": {
+          "name": "Receta",
+          "description": "Receta de modelo a usar"
+        }
+      }
+    },
+    "list_models": {
+      "name": "Listar modelos",
+      "description": "Lista los modelos disponibles",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Entrada de configuración a usar"
+        },
+        "show_all": {
+          "name": "Mostrar todos",
+          "description": "Incluir modelos no descargados"
+        }
+      }
+    },
+    "get_system_info": {
+      "name": "Obtener info del sistema",
+      "description": "Obtiene información del sistema",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Entrada de configuración a usar"
+        }
+      }
+    },
+    "get_stats": {
+      "name": "Obtener estadísticas",
+      "description": "Obtiene estadísticas de rendimiento",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Entrada de configuración a usar"
+        }
+      }
+    },
+    "set_default_model": {
+      "name": "Definir modelo predeterminado",
+      "description": "Define el modelo de conversación predeterminado",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Entrada de configuración a usar"
+        },
+        "model_name": {
+          "name": "Nombre del modelo",
+          "description": "Nombre del modelo a definir como predeterminado"
+        }
+      }
+    },
+    "query_image": {
+      "name": "Consultar imagen",
+      "description": "Analiza una imagen con un modelo de visión",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Entrada de configuración a usar"
+        },
+        "image_url": {
+          "name": "URL de imagen",
+          "description": "URL o ruta de la imagen"
+        },
+        "prompt": {
+          "name": "Prompt",
+          "description": "Pregunta sobre la imagen"
+        },
+        "model": {
+          "name": "Modelo",
+          "description": "Modelo de visión a usar"
+        }
+      }
+    },
+    "update_config": {
+      "name": "Actualizar configuración",
+      "description": "Actualiza la configuración de la integración en tiempo de ejecución",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Entrada de configuración a usar"
+        },
+        "server_url": {
+          "name": "URL del servidor",
+          "description": "Nueva URL del servidor Lemonade"
+        },
+        "api_key": {
+          "name": "Clave API",
+          "description": "Nueva clave API"
+        },
+        "default_model": {
+          "name": "Modelo predeterminado",
+          "description": "Nuevo modelo predeterminado"
+        },
+        "temperature": {
+          "name": "Temperatura",
+          "description": "Nueva temperatura predeterminada"
+        },
+        "top_p": {
+          "name": "Top P",
+          "description": "Parámetro de muestreo núcleo"
+        },
+        "top_k": {
+          "name": "Top K",
+          "description": "Parámetro de muestreo Top-K"
+        },
+        "max_tokens": {
+          "name": "Máx. tokens",
+          "description": "Nuevo máximo de tokens predeterminado"
+        },
+        "streaming": {
+          "name": "Streaming",
+          "description": "Activar respuestas en streaming"
+        },
+        "prompt": {
+          "name": "Prompt del sistema",
+          "description": "Prompt del sistema personalizado para el agente"
+        },
+        "timeout": {
+          "name": "Tiempo de espera",
+          "description": "Tiempo de espera de la petición en segundos"
+        }
+      }
+    }
+  }
+}

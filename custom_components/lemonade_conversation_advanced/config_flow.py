@@ -11,7 +11,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import aiohttp_client, llm
+from homeassistant.helpers import aiohttp_client, config_validation as cv, llm
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     EntitySelector,
@@ -33,10 +33,13 @@ from .const import (
     CONF_CLEAN_RESPONSES,
     CONF_CONNECT_TIMEOUT,
     CONF_CONTROL_HA,
+    CONF_CONTEXT_TEMPLATES,
     CONF_DEBUG_MODE,
     CONF_END_WORDS,
     CONF_ENABLE_RAG,
     CONF_ENABLE_STREAMING,
+    CONF_ENABLED_DOMAINS,
+    CONF_ENTITY_ALIASES,
     CONF_RESPECT_EXPOSURE,
     CONF_FIRST_DELTA_TIMEOUT,
     CONF_FOLLOW_UP_PHRASES,
@@ -45,6 +48,7 @@ from .const import (
     CONF_MAX_ITERATIONS,
     CONF_MAX_RETRIES,
     CONF_MAX_TOKENS,
+    CONF_MAX_ENTITIES_PER_DISCOVERY,
     CONF_MODEL_NAME,
     CONF_RAG_TOP_K,
     CONF_REQUEST_TIMEOUT,
@@ -56,10 +60,13 @@ from .const import (
     CONF_TEMPERATURE,
     DEFAULT_CLEAN_RESPONSES,
     DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_CONTEXT_TEMPLATES,
     DEFAULT_CONTROL_HA,
     DEFAULT_DEBUG_MODE,
     DEFAULT_END_WORDS,
     DEFAULT_ENABLE_RAG,
+    DEFAULT_ENABLED_DOMAINS,
+    DEFAULT_ENTITY_ALIASES,
     DEFAULT_ENABLE_STREAMING,
     DEFAULT_FIRST_DELTA_TIMEOUT,
     DEFAULT_FOLLOW_UP_PHRASES,
@@ -67,6 +74,7 @@ from .const import (
     DEFAULT_MAX_ITERATIONS,
     DEFAULT_MAX_RETRIES,
     DEFAULT_MAX_TOKENS,
+    DEFAULT_MAX_ENTITIES_PER_DISCOVERY,
     DEFAULT_MODEL_NAME,
     DEFAULT_RAG_TOP_K,
     DEFAULT_REQUEST_TIMEOUT,
@@ -77,6 +85,9 @@ from .const import (
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEMPERATURE,
     DOMAIN,
+    MAX_MAX_ENTITIES_PER_DISCOVERY,
+    MIN_MAX_ENTITIES_PER_DISCOVERY,
+    SUPPORTED_DOMAINS,
     MAX_CONNECT_TIMEOUT,
     MAX_FIRST_DELTA_TIMEOUT,
     MAX_MAX_HISTORY,
@@ -371,6 +382,39 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
             ):
                 if key in user_input:
                     user_input[key] = user_input[key] in ("1", True, "true")
+
+            # Normalize context_templates: text -> list (one template per line)
+            if CONF_CONTEXT_TEMPLATES in user_input:
+                user_input[CONF_CONTEXT_TEMPLATES] = [
+                    line.strip()
+                    for line in user_input[CONF_CONTEXT_TEMPLATES].splitlines()
+                    if line.strip()
+                ]
+
+            # Normalize entity_aliases: "entity_id: alias" lines -> dict
+            if CONF_ENTITY_ALIASES in user_input:
+                aliases: dict[str, str] = {}
+                for line in user_input[CONF_ENTITY_ALIASES].splitlines():
+                    line = line.strip()
+                    if not line or ":" not in line:
+                        continue
+                    ent, alias = line.split(":", 1)
+                    ent = ent.strip()
+                    alias = alias.strip()
+                    if ent and alias:
+                        aliases[ent] = alias
+                user_input[CONF_ENTITY_ALIASES] = aliases
+
+            # Normalize numeric fields
+            if CONF_MAX_ENTITIES_PER_DISCOVERY in user_input:
+                try:
+                    user_input[CONF_MAX_ENTITIES_PER_DISCOVERY] = int(
+                        user_input[CONF_MAX_ENTITIES_PER_DISCOVERY]
+                    )
+                except (ValueError, TypeError):
+                    user_input[CONF_MAX_ENTITIES_PER_DISCOVERY] = (
+                        DEFAULT_MAX_ENTITIES_PER_DISCOVERY
+                    )
             title = user_input.get(CONF_MODEL_NAME, "Lemonade")
             if self._is_new:
                 return self.async_create_entry(
@@ -435,6 +479,46 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                         default=options.get(CONF_TECHNICAL_PROMPT, ""),
                     ): TextSelector(
                         TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+                    ),
+                    # ── Context & Entities ───────────────────────
+                    vol.Optional(
+                        CONF_CONTEXT_TEMPLATES,
+                        default="\n".join(
+                            options.get(CONF_CONTEXT_TEMPLATES, DEFAULT_CONTEXT_TEMPLATES)
+                        ),
+                    ): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+                    ),
+                    vol.Optional(
+                        CONF_ENABLED_DOMAINS,
+                        default=options.get(
+                            CONF_ENABLED_DOMAINS, DEFAULT_ENABLED_DOMAINS
+                        ),
+                    ): cv.multi_select(SUPPORTED_DOMAINS),
+                    vol.Optional(
+                        CONF_ENTITY_ALIASES,
+                        default="\n".join(
+                            f"{k}: {v}"
+                            for k, v in options.get(
+                                CONF_ENTITY_ALIASES, DEFAULT_ENTITY_ALIASES
+                            ).items()
+                        ),
+                    ): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+                    ),
+                    vol.Optional(
+                        CONF_MAX_ENTITIES_PER_DISCOVERY,
+                        default=options.get(
+                            CONF_MAX_ENTITIES_PER_DISCOVERY,
+                            DEFAULT_MAX_ENTITIES_PER_DISCOVERY,
+                        ),
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=MIN_MAX_ENTITIES_PER_DISCOVERY,
+                            max=MAX_MAX_ENTITIES_PER_DISCOVERY,
+                            step=5,
+                            mode=NumberSelectorMode.BOX,
+                        )
                     ),
                     # ── Response Settings ───────────────────────────
                     vol.Optional(
