@@ -19,6 +19,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import template as template_helper
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.llm import ToolInput
+from homeassistant.util import dt as dt_util
 from voluptuous_openapi import convert
 
 from .api import LemonadeAPIClient
@@ -180,6 +181,26 @@ class LemonadeConversationEntity(
             options.get(CONF_LLM_HASS_API),
             options.get(CONF_PROMPT),
             user_input.extra_system_prompt,
+        )
+
+        # Reinforce current date/time. Small models tend to answer from
+        # training-cutoff knowledge (e.g. "it's 2025") even when the base
+        # prompt already states today's date, so we inject an explicit,
+        # authoritative instruction.
+        now_local = dt_util.now()
+        chat_log.content.append(
+            conversation.SystemContent(
+                content=(
+                    "CURRENT DATE/TIME (authoritative): it is "
+                    f"{now_local.strftime('%A %d %B %Y, %H:%M')} "
+                    f"({now_local.strftime('%Y-%m-%d')}). "
+                    "ALWAYS use this real, current date and time for any "
+                    "reasoning about 'now', 'today', 'currently', recent "
+                    "events or web-search results. IGNORE any date implied "
+                    "by your training data — your training cutoff is NOT the "
+                    "current date."
+                )
+            )
         )
 
         # Append technical prompt as system content

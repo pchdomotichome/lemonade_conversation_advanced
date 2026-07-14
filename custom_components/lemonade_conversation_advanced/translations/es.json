@@ -34,9 +34,10 @@
       "already_configured": "Este servidor ya está configurado"
     }
   },
-  "options": {
-    "step": {
-      "set_options": {
+  "config_subentries": {
+    "conversation": {
+      "step": {
+        "set_options": {
         "title": "Lemonade Conversation Advanced",
         "description": "Configura el modelo, el contexto, el comportamiento y los tiempos de espera de este agente.",
         "data": {
@@ -110,6 +111,29 @@
           "first_delta_timeout": "Espera máxima del primer token en streaming (cae a modo sin streaming si se excede).",
           "max_retries": "Intentos de reintento ante fallo de conexión.",
           "retry_backoff": "Segundos base de espera entre reintentos (exponencial)."
+          }
+        }
+      }
+    },
+    "ai_task": {
+      "step": {
+        "set_options": {
+          "title": "Tarea IA Lemonade",
+          "description": "Configura el modelo y los parámetros para la generación de Tareas IA.",
+          "data": {
+            "model_name": "Modelo",
+            "system_prompt": "Prompt del sistema",
+            "temperature": "Temperatura (creatividad)",
+            "max_tokens": "Máx. tokens de respuesta",
+            "request_timeout": "Tiempo de espera de petición (s)"
+          },
+          "data_description": {
+            "model_name": "Modelo LLM cargado en el servidor Lemonade.",
+            "system_prompt": "Instrucciones base para la generación de Tareas IA.",
+            "temperature": "0 = determinista, 2 = muy creativo.",
+            "max_tokens": "Longitud máxima de la respuesta generada.",
+            "request_timeout": "Tiempo de espera total de la petición HTTP."
+          }
         }
       }
     }
