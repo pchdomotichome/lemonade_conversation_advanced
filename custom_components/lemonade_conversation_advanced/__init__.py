@@ -69,7 +69,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     server_url = entry.data.get(CONF_SERVER_URL, "")
     api_key = entry.data.get(CONF_API_KEY, "")
 
-    # Validate connection
+    # Validate connection (best-effort: a unreachable/slow server must not
+    # crash setup — signal "not ready" so Home Assistant retries later).
     import aiohttp
     from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -86,8 +87,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ) as resp:
             if resp.status >= 400:
                 raise ConfigEntryNotReady(f"HTTP {resp.status}")
-    except aiohttp.ClientError as err:
-        raise ConfigEntryNotReady(f"Cannot connect to {server_url}: {err}") from err
+    except (aiohttp.ClientError, TimeoutError) as err:
+        raise ConfigEntryNotReady(
+            f"Cannot connect to {server_url}: {err}"
+        ) from err
 
     # Store entry data
     hass.data[DOMAIN][entry.entry_id] = {
