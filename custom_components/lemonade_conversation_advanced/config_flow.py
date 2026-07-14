@@ -9,6 +9,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import aiohttp_client, config_validation as cv, llm
@@ -451,16 +452,19 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                     user_input[CONF_SEARXNG_MAX_RESULTS] = (
                         DEFAULT_SEARXNG_MAX_RESULTS
                     )
-            title = user_input.get(CONF_MODEL_NAME, "Lemonade")
+            title = user_input.pop(CONF_NAME, "").strip() or (
+                f"Lemonade ({user_input.get(CONF_MODEL_NAME, 'Lemonade')})"
+            )
             if self._is_new:
                 return self.async_create_entry(
-                    title=f"Lemonade ({title})",
+                    title=title,
                     data=user_input,
                 )
             return self.async_update_and_abort(
                 entry,
                 self._get_reconfigure_subentry(),
                 data=user_input,
+                title=title,
             )
 
         # Get current options
@@ -486,10 +490,22 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
             val = options.get(key, default)
             return "1" if val else "0"
 
+        # Default display name shown/edited by the user
+        if self._is_new:
+            default_name = (
+                "AI Task" if self._subentry_type == "ai_task" else "Conversation Agent"
+            )
+        else:
+            default_name = self._get_reconfigure_subentry().title
+
         return self.async_show_form(
             step_id="set_options",
             data_schema=vol.Schema(
                 {
+                    # ── Name ────────────────────────────────────────
+                    vol.Required(CONF_NAME, default=default_name): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.TEXT)
+                    ),
                     # ── Model & Prompts ─────────────────────────────
                     vol.Required(
                         CONF_MODEL_NAME,

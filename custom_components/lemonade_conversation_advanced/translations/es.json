@@ -36,11 +36,17 @@
   },
   "config_subentries": {
     "conversation": {
+      "initiate_flow": {
+        "user": "Añadir agente de conversación",
+        "reconfigure": "Reconfigurar agente de conversación"
+      },
+      "entry_type": "Agente de conversación",
       "step": {
         "set_options": {
         "title": "Lemonade Conversation Advanced",
         "description": "Configura el modelo, el contexto, el comportamiento y los tiempos de espera de este agente.",
         "data": {
+          "name": "Nombre",
           "model_name": "Modelo",
           "system_prompt": "Prompt del sistema",
           "technical_prompt": "Instrucciones técnicas",
@@ -77,10 +83,11 @@
           "retry_backoff": "Espera entre reintentos (s)"
         },
         "data_description": {
+          "name": "Nombre para mostrar de este agente (aparece en la lista de subentradas).",
           "model_name": "Modelo LLM cargado en el servidor Lemonade.",
           "system_prompt": "Instrucciones base de personalidad y comportamiento del asistente.",
-          "technical_prompt": "Instrucciones internas de razonamiento y uso de herramientas. Admite marcadores: {time}, {date}, {current_area}, {index}, {response_mode}.",
-          "context_templates": "Una plantilla Jinja2 por línea. Cada una se renderiza e inyecta como contexto dinámico (p. ej. 'Hora: {{ now().strftime(\"%H:%M\") }}').",
+          "technical_prompt": "Instrucciones internas de razonamiento y uso de herramientas. Marcadores admitidos: time, date, current_area, index, response_mode (encierra cada uno entre llaves simples).",
+          "context_templates": "Una plantilla Jinja2 por línea, renderizada e inyectada como contexto dinámico. Ejemplo: una línea que imprime la hora actual con now().strftime.",
           "enabled_domains": "Limita qué dominios puede ver y controlar el LLM.",
           "entity_aliases": "Uno por línea, formato: entity_id: alias (p. ej. 'light.bedside: luz de mesita').",
           "max_entities_per_discovery": "Tope de entidades devueltas por llamada de descubrimiento (20-500).",
@@ -116,11 +123,17 @@
       }
     },
     "ai_task": {
+      "initiate_flow": {
+        "user": "Añadir tarea IA",
+        "reconfigure": "Reconfigurar tarea IA"
+      },
+      "entry_type": "Tarea IA",
       "step": {
         "set_options": {
           "title": "Tarea IA Lemonade",
           "description": "Configura el modelo y los parámetros para la generación de Tareas IA.",
           "data": {
+            "name": "Nombre",
             "model_name": "Modelo",
             "system_prompt": "Prompt del sistema",
             "temperature": "Temperatura (creatividad)",
@@ -128,6 +141,7 @@
             "request_timeout": "Tiempo de espera de petición (s)"
           },
           "data_description": {
+            "name": "Nombre para mostrar de esta tarea IA (aparece en la lista de subentradas).",
             "model_name": "Modelo LLM cargado en el servidor Lemonade.",
             "system_prompt": "Instrucciones base para la generación de Tareas IA.",
             "temperature": "0 = determinista, 2 = muy creativo.",

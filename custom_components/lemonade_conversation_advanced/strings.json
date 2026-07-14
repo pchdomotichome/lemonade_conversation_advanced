@@ -36,11 +36,17 @@
   },
   "config_subentries": {
     "conversation": {
+      "initiate_flow": {
+        "user": "Add conversation agent",
+        "reconfigure": "Reconfigure conversation agent"
+      },
+      "entry_type": "Conversation agent",
       "step": {
         "set_options": {
         "title": "Lemonade Conversation Advanced",
         "description": "Configure model, context, behavior and timeouts for this agent.",
         "data": {
+          "name": "Name",
           "model_name": "Model",
           "system_prompt": "System Prompt",
           "technical_prompt": "Technical Instructions",
@@ -77,10 +83,11 @@
           "retry_backoff": "Retry Backoff (seconds)"
         },
         "data_description": {
+          "name": "Display name for this agent (shown in the subentry list).",
           "model_name": "LLM model loaded on the Lemonade server.",
           "system_prompt": "Base personality and behavior instructions for the assistant.",
-          "technical_prompt": "Internal reasoning and tool-use instructions. Supports placeholders: {time}, {date}, {current_area}, {index}, {response_mode}.",
-          "context_templates": "One Jinja2 template per line. Each is rendered and injected as dynamic context (e.g. 'Hora: {{ now().strftime(\"%H:%M\") }}').",
+          "technical_prompt": "Internal reasoning and tool-use instructions. Supported placeholders: time, date, current_area, index, response_mode (wrap each in single curly braces).",
+          "context_templates": "One Jinja2 template per line, rendered and injected as dynamic context. Example: a line printing the current time with now().strftime.",
           "enabled_domains": "Limit which domains the LLM can see and control.",
           "entity_aliases": "One per line, format: entity_id: alias (e.g. 'light.bedside: luz de mesita').",
           "max_entities_per_discovery": "Cap on entities returned per discovery call (20-500).",
@@ -116,11 +123,17 @@
       }
     },
     "ai_task": {
+      "initiate_flow": {
+        "user": "Add AI task",
+        "reconfigure": "Reconfigure AI task"
+      },
+      "entry_type": "AI task",
       "step": {
         "set_options": {
           "title": "Lemonade AI Task",
           "description": "Configure model and parameters for AI Task generation.",
           "data": {
+            "name": "Name",
             "model_name": "Model",
             "system_prompt": "System Prompt",
             "temperature": "Temperature (creativity)",
@@ -128,6 +141,7 @@
             "request_timeout": "Request Timeout (seconds)"
           },
           "data_description": {
+            "name": "Display name for this AI task (shown in the subentry list).",
             "model_name": "LLM model loaded on the Lemonade server.",
             "system_prompt": "Base instructions for AI Task generation.",
             "temperature": "0 = deterministic, 2 = very creative.",
