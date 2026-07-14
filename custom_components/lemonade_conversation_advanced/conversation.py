@@ -29,6 +29,7 @@ from .exceptions import (
 )
 from .const import (
     CONF_CLEAN_RESPONSES,
+    CONF_CONFIRMATION_REQUIRED,
     CONF_CONNECT_TIMEOUT,
     CONF_CONTEXT_TEMPLATES,
     CONF_CONTROL_HA,
@@ -54,6 +55,8 @@ from .const import (
     CONF_SYSTEM_PROMPT,
     CONF_TECHNICAL_PROMPT,
     CONF_TEMPERATURE,
+    CONFIRMATION_INSTRUCTION,
+    DEFAULT_CONFIRMATION_REQUIRED,
     DEFAULT_CONTEXT_TEMPLATES,
     DEFAULT_CLEAN_RESPONSES,
     DEFAULT_CONNECT_TIMEOUT,
@@ -192,6 +195,17 @@ class LemonadeConversationEntity(
         if rm_instructions:
             chat_log.content.append(
                 conversation.SystemContent(content=rm_instructions)
+            )
+
+        # Require confirmation before control actions if enabled
+        confirmation_required = options.get(
+            CONF_CONFIRMATION_REQUIRED, DEFAULT_CONFIRMATION_REQUIRED
+        )
+        if isinstance(confirmation_required, str):
+            confirmation_required = confirmation_required in ("1", "true", "yes", "on")
+        if confirmation_required:
+            chat_log.content.append(
+                conversation.SystemContent(content=CONFIRMATION_INSTRUCTION)
             )
 
         # Inject a concise home structure summary (NOT the full index —

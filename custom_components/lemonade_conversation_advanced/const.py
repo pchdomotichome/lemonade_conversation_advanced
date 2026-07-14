@@ -61,6 +61,8 @@ CONF_ENTITY_ALIASES = "entity_aliases"
 CONF_CONFIRMATION_REQUIRED = "confirmation_required"
 CONF_CUSTOM_SCRIPTS = "custom_scripts"
 CONF_CUSTOM_SCENES = "custom_scenes"
+CONF_EXPOSE_SCRIPTS = "expose_scripts"
+CONF_EXPOSE_SCENES = "expose_scenes"
 
 # Web search (local, self-hosted via SearXNG)
 CONF_ENABLE_WEB_SEARCH = "enable_web_search"
@@ -142,6 +144,18 @@ DEFAULT_ENTITY_ALIASES: Final[dict[str, str]] = {}
 DEFAULT_CONFIRMATION_REQUIRED = False
 DEFAULT_CUSTOM_SCRIPTS: Final[dict[str, dict[str, Any]]] = {}
 DEFAULT_CUSTOM_SCENES: Final[dict[str, dict[str, Any]]] = {}
+DEFAULT_EXPOSE_SCRIPTS: Final[bool] = False
+DEFAULT_EXPOSE_SCENES: Final[bool] = False
+
+# System instruction injected when confirmation_required is enabled.
+CONFIRMATION_INSTRUCTION: Final[str] = (
+    "CONFIRMATION REQUIRED: Before performing ANY control action "
+    "(turning devices on/off, changing values, running scripts, "
+    "activating scenes), you MUST first ask the user to confirm and "
+    "wait for an explicit 'yes'/'sí' in a following message. Do NOT call "
+    "control tools until the user has confirmed. Read-only queries "
+    "(reading states) do not require confirmation."
+)
 
 # Web search (SearXNG) defaults
 DEFAULT_ENABLE_WEB_SEARCH: Final[bool] = False

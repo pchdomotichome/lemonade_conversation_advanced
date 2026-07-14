@@ -13,6 +13,8 @@ from homeassistant.util.json import JsonObjectType
 
 from .const import (
     CONF_ENABLE_WEB_SEARCH,
+    CONF_EXPOSE_SCENES,
+    CONF_EXPOSE_SCRIPTS,
     CONF_SEARXNG_ENGINES,
     CONF_SEARXNG_MAX_RESULTS,
     CONF_SEARXNG_URL,
@@ -271,6 +273,76 @@ class GetEntitiesInAreaTool(llm.Tool):
         }
 
 
+class RunScriptTool(llm.Tool):
+    """Run a Home Assistant script."""
+
+    name = "run_script"
+    description = (
+        "Run a Home Assistant script by its entity_id (e.g. 'script.arcoiris'). "
+        "Use get_entities_in_area or the provided context to find script entity_ids."
+    )
+    parameters = vol.Schema(
+        {
+            vol.Required("entity_id"): str,
+        }
+    )
+
+    async def async_call(
+        self, hass: HomeAssistant, tool_input: llm.ToolInput, llm_context: llm.LLMContext
+    ) -> JsonObjectType:
+        entity_id = tool_input.tool_args["entity_id"]
+        if not entity_id.startswith("script."):
+            return {"error": f"{entity_id} is not a script entity"}
+        if hass.states.get(entity_id) is None:
+            return {"error": f"Script {entity_id} not found"}
+        await hass.services.async_call(
+            "script", "turn_on", {"entity_id": entity_id}, blocking=True
+        )
+        return {"success": True, "entity_id": entity_id, "action": "run_script"}
+
+
+class ActivateSceneTool(llm.Tool):
+    """Activate a Home Assistant scene."""
+
+    name = "activate_scene"
+    description = (
+        "Activate a Home Assistant scene by its entity_id (e.g. 'scene.movie_night'). "
+        "Use get_entities_in_area or the provided context to find scene entity_ids."
+    )
+    parameters = vol.Schema(
+        {
+            vol.Required("entity_id"): str,
+        }
+    )
+
+    async def async_call(
+        self, hass: HomeAssistant, tool_input: llm.ToolInput, llm_context: llm.LLMContext
+    ) -> JsonObjectType:
+        entity_id = tool_input.tool_args["entity_id"]
+        if not entity_id.startswith("scene."):
+            return {"error": f"{entity_id} is not a scene entity"}
+        if hass.states.get(entity_id) is None:
+            return {"error": f"Scene {entity_id} not found"}
+        await hass.services.async_call(
+            "scene", "turn_on", {"entity_id": entity_id}, blocking=True
+        )
+        return {"success": True, "entity_id": entity_id, "action": "activate_scene"}
+
+
+def _any_agent_flag(hass: HomeAssistant, key: str) -> bool:
+    """Return True if any conversation subentry has the given bool flag enabled."""
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        for subentry in entry.subentries.values():
+            if subentry.subentry_type != "conversation":
+                continue
+            val = subentry.data.get(key, False)
+            if isinstance(val, str):
+                val = val in ("1", "true", "yes", "on")
+            if val:
+                return True
+    return False
+
+
 async def async_get_tools(
     hass: HomeAssistant,
     llm_context: llm.LLMContext,
@@ -294,6 +366,11 @@ async def async_get_tools(
     web_search_tool = _build_web_search_tool(hass)
     if web_search_tool is not None:
         tools.append(web_search_tool)
+
+    if _any_agent_flag(hass, CONF_EXPOSE_SCRIPTS):
+        tools.append(RunScriptTool())
+    if _any_agent_flag(hass, CONF_EXPOSE_SCENES):
+        tools.append(ActivateSceneTool())
 
     return tools
 

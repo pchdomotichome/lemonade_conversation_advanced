@@ -31,10 +31,13 @@ from homeassistant.helpers.selector import (
 from .const import (
     CONF_API_KEY,
     CONF_CLEAN_RESPONSES,
+    CONF_CONFIRMATION_REQUIRED,
     CONF_CONNECT_TIMEOUT,
     CONF_CONTROL_HA,
     CONF_CONTEXT_TEMPLATES,
     CONF_DEBUG_MODE,
+    CONF_EXPOSE_SCENES,
+    CONF_EXPOSE_SCRIPTS,
     CONF_END_WORDS,
     CONF_ENABLE_RAG,
     CONF_ENABLE_STREAMING,
@@ -63,10 +66,13 @@ from .const import (
     CONF_TECHNICAL_PROMPT,
     CONF_TEMPERATURE,
     DEFAULT_CLEAN_RESPONSES,
+    DEFAULT_CONFIRMATION_REQUIRED,
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_CONTEXT_TEMPLATES,
     DEFAULT_CONTROL_HA,
     DEFAULT_DEBUG_MODE,
+    DEFAULT_EXPOSE_SCENES,
+    DEFAULT_EXPOSE_SCRIPTS,
     DEFAULT_END_WORDS,
     DEFAULT_ENABLE_RAG,
     DEFAULT_ENABLED_DOMAINS,
@@ -150,6 +156,9 @@ DEFAULT_CONVERSATION_DATA = {
     CONF_SEARXNG_URL: DEFAULT_SEARXNG_URL,
     CONF_SEARXNG_ENGINES: DEFAULT_SEARXNG_ENGINES,
     CONF_SEARXNG_MAX_RESULTS: DEFAULT_SEARXNG_MAX_RESULTS,
+    CONF_CONFIRMATION_REQUIRED: DEFAULT_CONFIRMATION_REQUIRED,
+    CONF_EXPOSE_SCRIPTS: DEFAULT_EXPOSE_SCRIPTS,
+    CONF_EXPOSE_SCENES: DEFAULT_EXPOSE_SCENES,
 }
 
 DEFAULT_AI_TASK_DATA = {
@@ -394,6 +403,9 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                 CONF_ENABLE_STREAMING,
                 CONF_RESPECT_EXPOSURE,
                 CONF_ENABLE_WEB_SEARCH,
+                CONF_CONFIRMATION_REQUIRED,
+                CONF_EXPOSE_SCRIPTS,
+                CONF_EXPOSE_SCENES,
             ):
                 if key in user_input:
                     user_input[key] = user_input[key] in ("1", True, "true")
@@ -592,6 +604,49 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                     vol.Optional(
                         CONF_CONTROL_HA,
                         default=_bool_val(CONF_CONTROL_HA, DEFAULT_CONTROL_HA),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value="1", label="On"),
+                                SelectOptionDict(value="0", label="Off"),
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_CONFIRMATION_REQUIRED,
+                        default=_bool_val(
+                            CONF_CONFIRMATION_REQUIRED,
+                            DEFAULT_CONFIRMATION_REQUIRED,
+                        ),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value="1", label="On"),
+                                SelectOptionDict(value="0", label="Off"),
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_EXPOSE_SCRIPTS,
+                        default=_bool_val(
+                            CONF_EXPOSE_SCRIPTS, DEFAULT_EXPOSE_SCRIPTS
+                        ),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value="1", label="On"),
+                                SelectOptionDict(value="0", label="Off"),
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_EXPOSE_SCENES,
+                        default=_bool_val(
+                            CONF_EXPOSE_SCENES, DEFAULT_EXPOSE_SCENES
+                        ),
                     ): SelectSelector(
                         SelectSelectorConfig(
                             options=[
