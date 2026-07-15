@@ -325,6 +325,29 @@ def build_personalities(hass: Any) -> dict[str, dict[str, str]]:
             }
         )
     return merged
+
+
+def resolve_persona_prompt(
+    options: dict[str, Any],
+    personas: dict[str, dict[str, str]],
+    personality: str,
+) -> str:
+    """Return the effective persona prompt for injection/display.
+
+    Priority: per-personality customized prompt (personality_prompts dict) >
+    legacy single prompt (only for the 'custom' persona) > built-in prompt.
+    Legacy prompts are intentionally NOT applied to built-in personas, so a
+    stale custom/system_prompt from an older version cannot leak into them.
+    """
+    prompts = options.get(CONF_PERSONALITY_PROMPTS, {}) or {}
+    effective = prompts.get(personality)
+    if effective:
+        return effective
+    if personality == PERSONALITY_CUSTOM:
+        legacy = options.get(CONF_SYSTEM_PROMPT) or options.get(CONF_PERSONALITY_PROMPT)
+        if legacy:
+            return legacy
+    return personas.get(personality, {}).get("prompt", "")
 DEFAULT_CONTROL_HA = True
 DEFAULT_RESPONSE_MODE = "default"
 DEFAULT_FOLLOW_UP_MODE = "default"  # Keep for backward compatibility

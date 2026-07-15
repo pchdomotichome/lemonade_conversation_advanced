@@ -61,8 +61,8 @@ from .const import (
     CONF_PERSONALITY_EXAMPLES,
     CONF_PERSONALITY_PROMPT,
     CONF_PERSONALITY_PROMPTS,
-    CONF_SARCASM_ENTITY,
     build_personalities,
+    resolve_persona_prompt,
     CONFIRMATION_INSTRUCTION,
     DEFAULT_CONFIRMATION_REQUIRED,
     DEFAULT_INCLUDE_EXAMPLES,
@@ -210,12 +210,7 @@ class LemonadeConversationEntity(
             persona_text = options.get(CONF_SYSTEM_PROMPT) or ""
             personality = PERSONALITY_CUSTOM if persona_text else PERSONALITY_DEFAULT
         else:
-            persona_text = (
-                options.get(CONF_PERSONALITY_PROMPTS, {}).get(personality)
-                or options.get(CONF_PERSONALITY_PROMPT)
-                or options.get(CONF_SYSTEM_PROMPT)
-                or personas.get(personality, {}).get("prompt", "")
-            )
+            persona_text = resolve_persona_prompt(options, personas, personality)
 
         if persona_text:
             chat_log.content.append(

@@ -42,6 +42,7 @@ from .const import (
     CONF_PERSONALITY_PROMPT,
     CONF_PERSONALITY_PROMPTS,
     build_personalities,
+    resolve_persona_prompt,
     CONF_SARCASM_ENTITY,
     DEFAULT_INCLUDE_EXAMPLES,
     DEFAULT_PERSONALITY,
@@ -746,9 +747,9 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
             ),
             vol.Optional(
                 CONF_PERSONALITY_PROMPT,
-                default=options.get(CONF_PERSONALITY_PROMPTS, {}).get(_personality)
-                or options.get(CONF_SYSTEM_PROMPT)
-                or personalities.get(_personality, {}).get("prompt", ""),
+                default=resolve_persona_prompt(
+                    options, personalities, _personality
+                ),
             ): TextSelector(
                 TextSelectorConfig(
                     type=TextSelectorType.TEXT, multiline=True
