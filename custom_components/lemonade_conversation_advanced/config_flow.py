@@ -480,22 +480,33 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                     if line.strip()
                 ]
 
-            # Normalize personality prompt: store it per-personality so that
-            # switching personas updates the editable prompt to that persona's
-            # built-in text (config flow can't react live to the dropdown).
+            # Normalize personality prompt: store it per-personality. Config
+            # flow cannot refresh the prompt textbox live when the persona
+            # dropdown changes, so on submit the box may still hold the
+            # previously-shown text. To avoid leaking that stale text across
+            # personas, we reset the target persona's override whenever the
+            # persona actually changed, and only persist an edit when the
+            # persona is unchanged and the text differs from its built-in.
             if CONF_PERSONALITY_PROMPT in user_input:
-                sub_personality = user_input.get(
-                    CONF_PERSONALITY, DEFAULT_PERSONALITY
+                old_data = (
+                    {} if self._is_new else self._get_reconfigure_subentry().data
                 )
+                old_personality = old_data.get(CONF_PERSONALITY, DEFAULT_PERSONALITY)
+                new_personality = user_input.get(CONF_PERSONALITY, DEFAULT_PERSONALITY)
                 sub_prompt = user_input.pop(CONF_PERSONALITY_PROMPT)
-                builtin = (personalities.get(sub_personality, {}) or {}).get(
-                    "prompt", ""
-                )
                 prompts = dict(user_input.get(CONF_PERSONALITY_PROMPTS, {}) or {})
-                if sub_prompt and sub_prompt != builtin:
-                    prompts[sub_personality] = sub_prompt
+                if new_personality != old_personality:
+                    # Persona switched: discard the stale box content and
+                    # reset the target persona to its built-in prompt.
+                    prompts.pop(new_personality, None)
                 else:
-                    prompts.pop(sub_personality, None)
+                    builtin = (personalities.get(new_personality, {}) or {}).get(
+                        "prompt", ""
+                    )
+                    if sub_prompt and sub_prompt != builtin:
+                        prompts[new_personality] = sub_prompt
+                    else:
+                        prompts.pop(new_personality, None)
                 user_input[CONF_PERSONALITY_PROMPTS] = prompts
 
             # Normalize entity_aliases: "entity_id: alias" lines -> dict
