@@ -1,6 +1,11 @@
 """Constants for the Lemonade Conversation Advanced integration."""
 
+import json
+import logging
+import os
 from typing import Any, Final
+
+_LOGGER = logging.getLogger(__name__)
 
 DOMAIN: Final = "lemonade_conversation_advanced"
 SYSTEM_ENTRY_UNIQUE_ID = "lemonade_conversation_advanced_system_settings"
@@ -256,8 +261,69 @@ SARCASTIC_TONE_BLOCKS: Final[dict[str, str]] = {
 CONF_SARCASM_ENTITY = "sarcasm_entity"
 CONF_INCLUDE_EXAMPLES = "include_examples"
 CONF_PERSONALITY_EXAMPLES = "personality_examples"
+CONF_PERSONALITY_PROMPT = "personality_prompt"
 DEFAULT_SARCASM_ENTITY = "input_select.sarcasm_level"
 DEFAULT_INCLUDE_EXAMPLES = False
+
+# Personality data files. Built-in personalities ship inside the integration;
+# users can extend/override them via personalities_override.json placed in
+# <config>/lemonade_conversation_advanced/ (survives HACS updates).
+PERSONALITIES_FILE = os.path.join(os.path.dirname(__file__), "personalities.json")
+PERSONALITIES_OVERRIDE_DIR = "lemonade_conversation_advanced"
+PERSONALITIES_OVERRIDE_FILE = "personalities_override.json"
+
+
+def _load_personalities_file(path: str) -> dict[str, Any]:
+    """Load a personalities JSON file, returning {} on any error."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict):
+            return data
+        _LOGGER.warning("Personalities file %s is not a mapping; ignoring", path)
+    except FileNotFoundError:
+        pass
+    except (OSError, json.JSONDecodeError) as err:
+        _LOGGER.warning("Could not load personalities file %s: %s", path, err)
+    return {}
+
+
+def build_personalities(hass: Any) -> dict[str, dict[str, str]]:
+    """Merge built-in, shipped and user-override personalities.
+
+    Returns a dict keyed by personality id with {"name", "prompt", "examples"}.
+    """
+    merged: dict[str, dict[str, str]] = {}
+    # 1) Code-built-ins (kept for backward compatibility)
+    for key, prompt in PERSONALITIES.items():
+        merged[key] = {
+            "name": key,
+            "prompt": prompt,
+            "examples": PERSONALITY_EXAMPLES.get(key, ""),
+        }
+    # 2) Shipped personalities.json (data-driven source of truth)
+    for key, value in _load_personalities_file(PERSONALITIES_FILE).items():
+        if not isinstance(value, dict):
+            continue
+        merged[key] = {
+            "name": value.get("name", key),
+            "prompt": value.get("prompt", ""),
+            "examples": value.get("examples", ""),
+        }
+    # 3) User override (highest priority)
+    override_path = hass.config.path(PERSONALITIES_OVERRIDE_DIR, PERSONALITIES_OVERRIDE_FILE)
+    for key, value in _load_personalities_file(override_path).items():
+        if not isinstance(value, dict):
+            continue
+        merged.setdefault(key, {})
+        merged[key].update(
+            {
+                "name": value.get("name", merged[key].get("name", key)),
+                "prompt": value.get("prompt", merged[key].get("prompt", "")),
+                "examples": value.get("examples", merged[key].get("examples", "")),
+            }
+        )
+    return merged
 DEFAULT_CONTROL_HA = True
 DEFAULT_RESPONSE_MODE = "default"
 DEFAULT_FOLLOW_UP_MODE = "default"  # Keep for backward compatibility

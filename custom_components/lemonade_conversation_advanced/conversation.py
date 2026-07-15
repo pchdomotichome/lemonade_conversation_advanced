@@ -59,7 +59,9 @@ from .const import (
     CONF_PERSONALITY,
     CONF_INCLUDE_EXAMPLES,
     CONF_PERSONALITY_EXAMPLES,
+    CONF_PERSONALITY_PROMPT,
     CONF_SARCASM_ENTITY,
+    build_personalities,
     CONFIRMATION_INSTRUCTION,
     DEFAULT_CONFIRMATION_REQUIRED,
     DEFAULT_INCLUDE_EXAMPLES,
@@ -196,17 +198,22 @@ class LemonadeConversationEntity(
         )
 
         # Inject the selected assistant personality as the base system prompt.
-        # Backward compatible: legacy subentries created before this field
-        # existed fall back to their configured CONF_SYSTEM_PROMPT (which was
-        # previously collected but never injected — now it is applied).
+        # Personalities are data-driven (built-in + shipped personalities.json
+        # + user personalities_override.json). The editable prompt stored in
+        # CONF_PERSONALITY_PROMPT takes precedence over the built-in text, so
+        # users can tweak a persona without losing future updates.
+        # Backward compatible: legacy subentries fall back to CONF_SYSTEM_PROMPT.
+        personas = build_personalities(self.hass)
         personality = options.get(CONF_PERSONALITY)
         if personality is None:
             persona_text = options.get(CONF_SYSTEM_PROMPT) or ""
             personality = PERSONALITY_CUSTOM if persona_text else PERSONALITY_DEFAULT
-        elif personality == PERSONALITY_CUSTOM:
-            persona_text = options.get(CONF_SYSTEM_PROMPT) or DEFAULT_SYSTEM_PROMPT
         else:
-            persona_text = PERSONALITIES.get(personality, "")
+            persona_text = (
+                options.get(CONF_PERSONALITY_PROMPT)
+                or options.get(CONF_SYSTEM_PROMPT)
+                or personas.get(personality, {}).get("prompt", "")
+            )
 
         if persona_text:
             chat_log.content.append(
@@ -234,7 +241,9 @@ class LemonadeConversationEntity(
         # Optional per-personality examples (user opts in via "Include
         # examples"). Helpful to steer small models toward the desired tone.
         if options.get(CONF_INCLUDE_EXAMPLES, DEFAULT_INCLUDE_EXAMPLES):
-            examples = options.get(CONF_PERSONALITY_EXAMPLES) or ""
+            examples = options.get(CONF_PERSONALITY_EXAMPLES) or personas.get(
+                personality, {}
+            ).get("examples", "")
             if examples.strip():
                 chat_log.content.append(
                     conversation.SystemContent(

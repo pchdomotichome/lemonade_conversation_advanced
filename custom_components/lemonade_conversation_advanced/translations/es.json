@@ -64,11 +64,6 @@
               "data": {
                 "name": "Nombre",
                 "model_name": "Modelo",
-                "personality": "Personalidad",
-                "system_prompt": "Prompt del sistema",
-                "sarcasm_entity": "Entidad de nivel de sarcasmo",
-                "include_examples": "Incluir ejemplos",
-                "personality_examples": "Ejemplos de personalidad",
                 "technical_prompt": "Instrucciones técnicas",
                 "temperature": "Temperatura (creatividad)",
                 "max_tokens": "Máx. tokens de respuesta",
@@ -80,11 +75,6 @@
               "data_description": {
                 "name": "Nombre para mostrar de este agente (aparece en la lista de subentradas).",
                 "model_name": "Modelo LLM cargado en el servidor Lemonade.",
-                "personality": "Elige una personalidad predefinida del asistente, o 'Personalizada' para escribir tu propio Prompt del sistema abajo.",
-                "system_prompt": "Instrucciones base de personalidad y comportamiento del asistente. Se usa cuando la Personalidad está en 'Personalizada'.",
-                "sarcasm_entity": "Entidad (input_select o sensor) cuyo estado define la intensidad de sarcasmo para la personalidad Sarcástico Argentino. Valores: Normal, Bajo, Medio, Alto.",
-                "include_examples": "Agrega diálogos de ejemplo predefinidos (según la personalidad) al prompt del sistema para guiar a los modelos pequeños hacia el tono deseado.",
-                "personality_examples": "Ejemplos de preguntas/respuestas como guía de estilo. Se precargan según la personalidad elegida; edítalos libremente.",
                 "technical_prompt": "Instrucciones internas de razonamiento y uso de herramientas. Marcadores admitidos: time, date, current_area, index, response_mode (encierra cada uno entre llaves simples).",
                 "temperature": "0 = determinista, 2 = muy creativo.",
                 "max_tokens": "Longitud máxima de la respuesta generada.",
@@ -92,6 +82,24 @@
                 "response_mode": "Controla las preguntas de seguimiento y el fin de la conversación.",
                 "clean_responses": "Elimina emojis y caracteres especiales para una salida limpia de texto a voz.",
                 "enable_streaming": "Envía la respuesta token a token. Desactívalo para depurar el modo sin streaming."
+              }
+            },
+            "personalidad": {
+              "name": "🎭 Personalidad",
+              "description": "Persona, prompt editable, tono de sarcasmo dinámico y ejemplos.",
+              "data": {
+                "personality": "Personalidad",
+                "personality_prompt": "Prompt de personalidad (editable)",
+                "sarcasm_entity": "Entidad de nivel de sarcasmo",
+                "include_examples": "Incluir ejemplos",
+                "personality_examples": "Ejemplos de personalidad"
+              },
+              "data_description": {
+                "personality": "Elige una personalidad predefinida. Incluye cualquier personalidad definida en personalities.json o en tu personalities_override.json.",
+                "personality_prompt": "Prompt base editable de la personalidad elegida. Se precarga desde la personalidad; modificalo para ajustar el comportamiento. Se guarda por agente.",
+                "sarcasm_entity": "Entidad (input_select o sensor) cuyo estado define la intensidad de sarcasmo para la personalidad Sarcástico Argentino. Valores: Normal, Bajo, Medio, Alto.",
+                "include_examples": "Agrega diálogos de ejemplo predefinidos (según la personalidad) al prompt del sistema para guiar a los modelos pequeños hacia el tono deseado.",
+                "personality_examples": "Ejemplos de preguntas/respuestas como guía de estilo. Se precargan según la personalidad elegida; edítalos libremente."
               }
             },
             "context": {

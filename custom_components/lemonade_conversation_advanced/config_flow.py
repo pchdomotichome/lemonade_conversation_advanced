@@ -39,6 +39,8 @@ from .const import (
     CONF_INCLUDE_EXAMPLES,
     CONF_PERSONALITY,
     CONF_PERSONALITY_EXAMPLES,
+    CONF_PERSONALITY_PROMPT,
+    build_personalities,
     CONF_SARCASM_ENTITY,
     DEFAULT_INCLUDE_EXAMPLES,
     DEFAULT_PERSONALITY,
@@ -532,6 +534,9 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
         models = await self._fetch_models(entry)
         model_options = models or ["No models found"]
 
+        # Load personalities (built-in + shipped + user override)
+        personalities = build_personalities(self.hass)
+
         # Fetch available LLM APIs for HA control
         llm_apis = llm.async_get_apis(self.hass)
         llm_api_options = [{"value": api.id, "label": api.name} for api in llm_apis]
@@ -703,6 +708,55 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                 ),
             )
 
+        # Build the Personality section schema (examples shown only when enabled)
+        _personality = options.get(CONF_PERSONALITY, DEFAULT_PERSONALITY)
+        persona_fields = {
+            vol.Optional(
+                CONF_PERSONALITY,
+                default=_personality,
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(value=k, label=v["name"])
+                        for k, v in personalities.items()
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                    sort=True,
+                )
+            ),
+            vol.Optional(
+                CONF_PERSONALITY_PROMPT,
+                default=options.get(CONF_PERSONALITY_PROMPT)
+                or options.get(CONF_SYSTEM_PROMPT)
+                or personalities.get(_personality, {}).get("prompt", ""),
+            ): TextSelector(
+                TextSelectorConfig(
+                    type=TextSelectorType.TEXT, multiline=True
+                )
+            ),
+            vol.Optional(
+                CONF_SARCASM_ENTITY,
+                default=options.get(CONF_SARCASM_ENTITY, DEFAULT_SARCASM_ENTITY),
+            ): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.TEXT)
+            ),
+            vol.Optional(
+                CONF_INCLUDE_EXAMPLES,
+                default=_bool(CONF_INCLUDE_EXAMPLES, DEFAULT_INCLUDE_EXAMPLES),
+            ): BooleanSelector(),
+        }
+        if _bool(CONF_INCLUDE_EXAMPLES, DEFAULT_INCLUDE_EXAMPLES):
+            persona_fields[
+                vol.Optional(
+                    CONF_PERSONALITY_EXAMPLES,
+                    default=personalities.get(_personality, {}).get("examples", ""),
+                )
+            ] = TextSelector(
+                TextSelectorConfig(
+                    type=TextSelectorType.TEXT, multiline=True
+                )
+            )
+
         return self.async_show_form(
             step_id="set_options",
             data_schema=vol.Schema(
@@ -727,82 +781,6 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                                         ],
                                         mode=SelectSelectorMode.DROPDOWN,
                                         sort=True,
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_PERSONALITY,
-                                    default=options.get(
-                                        CONF_PERSONALITY, DEFAULT_PERSONALITY
-                                    ),
-                                ): SelectSelector(
-                                    SelectSelectorConfig(
-                                        options=[
-                                            SelectOptionDict(
-                                                value=PERSONALITY_DEFAULT,
-                                                label="Default (helpful assistant)",
-                                            ),
-                                            SelectOptionDict(
-                                                value=PERSONALITY_PIRATE,
-                                                label="Pirate (Blackbeard)",
-                                            ),
-                                            SelectOptionDict(
-                                                value=PERSONALITY_ROBOT,
-                                                label="Robot (Robo)",
-                                            ),
-                                            SelectOptionDict(
-                                                value=PERSONALITY_BUTLER,
-                                                label="Butler (Jeeves)",
-                                            ),
-                                            SelectOptionDict(
-                                                value=PERSONALITY_SARCASTIC_AR,
-                                                label="Sarcastic Argentine",
-                                            ),
-                                            SelectOptionDict(
-                                                value=PERSONALITY_CUSTOM,
-                                                label="Custom (use System Prompt below)",
-                                            ),
-                                        ],
-                                        mode=SelectSelectorMode.DROPDOWN,
-                                        sort=False,
-                                        translation_key="personality",
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_SYSTEM_PROMPT,
-                                    default=options.get(
-                                        CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
-                                    ),
-                                ): TextSelector(
-                                    TextSelectorConfig(
-                                        type=TextSelectorType.TEXT, multiline=True
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_SARCASM_ENTITY,
-                                    default=options.get(
-                                        CONF_SARCASM_ENTITY, DEFAULT_SARCASM_ENTITY
-                                    ),
-                                ): TextSelector(
-                                    TextSelectorConfig(type=TextSelectorType.TEXT)
-                                ),
-                                vol.Optional(
-                                    CONF_INCLUDE_EXAMPLES,
-                                    default=_bool(
-                                        CONF_INCLUDE_EXAMPLES,
-                                        DEFAULT_INCLUDE_EXAMPLES,
-                                    ),
-                                ): BooleanSelector(),
-                                vol.Optional(
-                                    CONF_PERSONALITY_EXAMPLES,
-                                    default=PERSONALITY_EXAMPLES.get(
-                                        options.get(
-                                            CONF_PERSONALITY, DEFAULT_PERSONALITY
-                                        ),
-                                        "",
-                                    ),
-                                ): TextSelector(
-                                    TextSelectorConfig(
-                                        type=TextSelectorType.TEXT, multiline=True
                                     )
                                 ),
                                 vol.Optional(
@@ -891,6 +869,11 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                                 ): BooleanSelector(),
                             }
                         ),
+                        {"collapsed": False},
+                    ),
+                    # ── 🎭 Personalidad ──────────────────────────
+                    vol.Required("personalidad"): section(
+                        vol.Schema(persona_fields),
                         {"collapsed": False},
                     ),
                     # ── 🧠 Context ──────────────────────────────────

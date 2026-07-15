@@ -64,11 +64,6 @@
               "data": {
                 "name": "Name",
                 "model_name": "Model",
-                "personality": "Personality",
-                "system_prompt": "System Prompt",
-                "sarcasm_entity": "Sarcasm Level Entity",
-                "include_examples": "Include Examples",
-                "personality_examples": "Personality Examples",
                 "technical_prompt": "Technical Instructions",
                 "temperature": "Temperature (creativity)",
                 "max_tokens": "Max Response Tokens",
@@ -80,11 +75,6 @@
               "data_description": {
                 "name": "Display name for this agent (shown in the subentry list).",
                 "model_name": "LLM model loaded on the Lemonade server.",
-                "personality": "Choose a predefined assistant persona, or 'Custom' to write your own System Prompt below.",
-                "system_prompt": "Base personality and behavior instructions for the assistant. Used when Personality is set to 'Custom'.",
-                "sarcasm_entity": "Entity (input_select or sensor) whose state sets the sarcasm intensity for the Sarcastic Argentine persona. Values: Normal, Bajo, Medio, Alto.",
-                "include_examples": "Append predefined example dialogues (per personality) to the system prompt to steer small models toward the desired tone.",
-                "personality_examples": "Example Q&A used as style guidance. Pre-filled from the selected personality; edit freely.",
                 "technical_prompt": "Internal reasoning and tool-use instructions. Supported placeholders: time, date, current_area, index, response_mode (wrap each in single curly braces).",
                 "temperature": "0 = deterministic, 2 = very creative.",
                 "max_tokens": "Maximum length of the generated response.",
@@ -92,6 +82,24 @@
                 "response_mode": "Controls follow-up questions and conversation ending behavior.",
                 "clean_responses": "Strip emojis and special characters so the response is clean for text-to-speech.",
                 "enable_streaming": "Stream the response token-by-token. Turn off to debug non-streaming fallback."
+              }
+            },
+            "personalidad": {
+              "name": "🎭 Personalidad",
+              "description": "Persona, editable prompt, dynamic sarcasm tone and examples.",
+              "data": {
+                "personality": "Personality",
+                "personality_prompt": "Personality Prompt (editable)",
+                "sarcasm_entity": "Sarcasm Level Entity",
+                "include_examples": "Include Examples",
+                "personality_examples": "Personality Examples"
+              },
+              "data_description": {
+                "personality": "Choose a predefined assistant persona. Options include any persona defined in personalities.json or your personalities_override.json.",
+                "personality_prompt": "Editable base prompt for the selected persona. Pre-filled from the persona; modify to tune behavior. Stored per agent.",
+                "sarcasm_entity": "Entity (input_select or sensor) whose state sets the sarcasm intensity for the Sarcastic Argentine persona. Values: Normal, Bajo, Medio, Alto.",
+                "include_examples": "Append predefined example dialogues (per personality) to the system prompt to steer small models toward the desired tone.",
+                "personality_examples": "Example Q&A used as style guidance. Pre-filled from the selected personality; edit freely."
               }
             },
             "context": {
