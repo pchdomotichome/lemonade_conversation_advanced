@@ -36,6 +36,20 @@ from .const import (
     AI_TASK_EXTRACTION_STRUCTURE,
     AI_TASK_EXTRACTION_TOOL,
     CONF_AI_TASK_ENABLE_VISION,
+    CONF_INCLUDE_EXAMPLES,
+    CONF_PERSONALITY,
+    CONF_PERSONALITY_EXAMPLES,
+    CONF_SARCASM_ENTITY,
+    DEFAULT_INCLUDE_EXAMPLES,
+    DEFAULT_PERSONALITY,
+    DEFAULT_SARCASM_ENTITY,
+    PERSONALITY_BUTLER,
+    PERSONALITY_CUSTOM,
+    PERSONALITY_DEFAULT,
+    PERSONALITY_EXAMPLES,
+    PERSONALITY_PIRATE,
+    PERSONALITY_ROBOT,
+    PERSONALITY_SARCASTIC_AR,
     CONF_AI_TASK_EXTRACTION_METHOD,
     CONF_AI_TASK_RETRIES,
     CONF_API_KEY,
@@ -145,6 +159,10 @@ _LOGGER = logging.getLogger(__name__)
 # Default subentry data
 DEFAULT_CONVERSATION_DATA = {
     CONF_SYSTEM_PROMPT: "You are a helpful Home Assistant voice assistant.",
+    CONF_PERSONALITY: DEFAULT_PERSONALITY,
+    CONF_SARCASM_ENTITY: DEFAULT_SARCASM_ENTITY,
+    CONF_INCLUDE_EXAMPLES: DEFAULT_INCLUDE_EXAMPLES,
+    CONF_PERSONALITY_EXAMPLES: "",
     CONF_TECHNICAL_PROMPT: "",
     CONF_TEMPERATURE: 0.7,
     CONF_MAX_TOKENS: 2048,
@@ -433,6 +451,7 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                 CONF_EXPOSE_SCRIPTS,
                 CONF_EXPOSE_SCENES,
                 CONF_AI_TASK_ENABLE_VISION,
+                CONF_INCLUDE_EXAMPLES,
             ):
                 if key in user_input:
                     user_input[key] = user_input[key] in ("1", True, "true")
@@ -711,9 +730,75 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                                     )
                                 ),
                                 vol.Optional(
+                                    CONF_PERSONALITY,
+                                    default=options.get(
+                                        CONF_PERSONALITY, DEFAULT_PERSONALITY
+                                    ),
+                                ): SelectSelector(
+                                    SelectSelectorConfig(
+                                        options=[
+                                            SelectOptionDict(
+                                                value=PERSONALITY_DEFAULT,
+                                                label="Default (helpful assistant)",
+                                            ),
+                                            SelectOptionDict(
+                                                value=PERSONALITY_PIRATE,
+                                                label="Pirate (Blackbeard)",
+                                            ),
+                                            SelectOptionDict(
+                                                value=PERSONALITY_ROBOT,
+                                                label="Robot (Robo)",
+                                            ),
+                                            SelectOptionDict(
+                                                value=PERSONALITY_BUTLER,
+                                                label="Butler (Jeeves)",
+                                            ),
+                                            SelectOptionDict(
+                                                value=PERSONALITY_SARCASTIC_AR,
+                                                label="Sarcastic Argentine",
+                                            ),
+                                            SelectOptionDict(
+                                                value=PERSONALITY_CUSTOM,
+                                                label="Custom (use System Prompt below)",
+                                            ),
+                                        ],
+                                        mode=SelectSelectorMode.DROPDOWN,
+                                        sort=False,
+                                        translation_key="personality",
+                                    )
+                                ),
+                                vol.Optional(
                                     CONF_SYSTEM_PROMPT,
                                     default=options.get(
                                         CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
+                                    ),
+                                ): TextSelector(
+                                    TextSelectorConfig(
+                                        type=TextSelectorType.TEXT, multiline=True
+                                    )
+                                ),
+                                vol.Optional(
+                                    CONF_SARCASM_ENTITY,
+                                    default=options.get(
+                                        CONF_SARCASM_ENTITY, DEFAULT_SARCASM_ENTITY
+                                    ),
+                                ): TextSelector(
+                                    TextSelectorConfig(type=TextSelectorType.TEXT)
+                                ),
+                                vol.Optional(
+                                    CONF_INCLUDE_EXAMPLES,
+                                    default=_bool(
+                                        CONF_INCLUDE_EXAMPLES,
+                                        DEFAULT_INCLUDE_EXAMPLES,
+                                    ),
+                                ): BooleanSelector(),
+                                vol.Optional(
+                                    CONF_PERSONALITY_EXAMPLES,
+                                    default=PERSONALITY_EXAMPLES.get(
+                                        options.get(
+                                            CONF_PERSONALITY, DEFAULT_PERSONALITY
+                                        ),
+                                        "",
                                     ),
                                 ): TextSelector(
                                     TextSelectorConfig(

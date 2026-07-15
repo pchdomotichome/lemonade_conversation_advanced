@@ -56,8 +56,20 @@ from .const import (
     CONF_SYSTEM_PROMPT,
     CONF_TECHNICAL_PROMPT,
     CONF_TEMPERATURE,
+    CONF_PERSONALITY,
+    CONF_INCLUDE_EXAMPLES,
+    CONF_PERSONALITY_EXAMPLES,
+    CONF_SARCASM_ENTITY,
     CONFIRMATION_INSTRUCTION,
     DEFAULT_CONFIRMATION_REQUIRED,
+    DEFAULT_INCLUDE_EXAMPLES,
+    DEFAULT_PERSONALITY,
+    DEFAULT_SARCASM_ENTITY,
+    PERSONALITIES,
+    PERSONALITY_CUSTOM,
+    PERSONALITY_DEFAULT,
+    PERSONALITY_SARCASTIC_AR,
+    SARCASTIC_TONE_BLOCKS,
     DEFAULT_CONTEXT_TEMPLATES,
     DEFAULT_CLEAN_RESPONSES,
     DEFAULT_CONNECT_TIMEOUT,
@@ -182,6 +194,53 @@ class LemonadeConversationEntity(
             options.get(CONF_PROMPT),
             user_input.extra_system_prompt,
         )
+
+        # Inject the selected assistant personality as the base system prompt.
+        # Backward compatible: legacy subentries created before this field
+        # existed fall back to their configured CONF_SYSTEM_PROMPT (which was
+        # previously collected but never injected — now it is applied).
+        personality = options.get(CONF_PERSONALITY)
+        if personality is None:
+            persona_text = options.get(CONF_SYSTEM_PROMPT) or ""
+            personality = PERSONALITY_CUSTOM if persona_text else PERSONALITY_DEFAULT
+        elif personality == PERSONALITY_CUSTOM:
+            persona_text = options.get(CONF_SYSTEM_PROMPT) or DEFAULT_SYSTEM_PROMPT
+        else:
+            persona_text = PERSONALITIES.get(personality, "")
+
+        if persona_text:
+            chat_log.content.append(
+                conversation.SystemContent(content=persona_text)
+            )
+
+        # Sarcastic-Argentine dynamic tone: read the configured sarcasm-level
+        # entity (default input_select.sarcasm_level) and append the matching
+        # tone block so the model adapts its irony per the user's setting.
+        if personality == PERSONALITY_SARCASTIC_AR:
+            level = "Normal"
+            sarcasm_entity = options.get(CONF_SARCASM_ENTITY) or DEFAULT_SARCASM_ENTITY
+            state = self.hass.states.get(sarcasm_entity) if sarcasm_entity else None
+            if state is not None and state.state in SARCASTIC_TONE_BLOCKS:
+                level = state.state
+            chat_log.content.append(
+                conversation.SystemContent(
+                    content=(
+                        f"SARCASM LEVEL: {level}. "
+                        f"{SARCASTIC_TONE_BLOCKS[level]}"
+                    )
+                )
+            )
+
+        # Optional per-personality examples (user opts in via "Include
+        # examples"). Helpful to steer small models toward the desired tone.
+        if options.get(CONF_INCLUDE_EXAMPLES, DEFAULT_INCLUDE_EXAMPLES):
+            examples = options.get(CONF_PERSONALITY_EXAMPLES) or ""
+            if examples.strip():
+                chat_log.content.append(
+                    conversation.SystemContent(
+                        content=f"EXAMPLES:\n{examples.strip()}"
+                    )
+                )
 
         # Reinforce current date/time. Small models tend to answer from
         # training-cutoff knowledge (e.g. "it's 2025") even when the base
