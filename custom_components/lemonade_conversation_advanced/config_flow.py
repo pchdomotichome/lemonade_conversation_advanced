@@ -40,6 +40,7 @@ from .const import (
     CONF_PERSONALITY,
     CONF_PERSONALITY_EXAMPLES,
     CONF_PERSONALITY_PROMPT,
+    CONF_PERSONALITY_PROMPTS,
     build_personalities,
     CONF_SARCASM_ENTITY,
     DEFAULT_INCLUDE_EXAMPLES,
@@ -431,6 +432,10 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
         if entry.state is not config_entries.ConfigEntryState.LOADED:
             return self.async_abort(reason="entry_not_loaded")
 
+        # Personalities (built-in + shipped + user override) — needed both for
+        # rendering defaults and for normalizing the saved prompt per-personality.
+        personalities = build_personalities(self.hass)
+
         if user_input is not None:
             # Sections nest their fields; flatten back into a single dict so
             # storage stays flat (backward compatible with conversation.py).
@@ -473,6 +478,24 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                     for line in user_input[CONF_CONTEXT_TEMPLATES].splitlines()
                     if line.strip()
                 ]
+
+            # Normalize personality prompt: store it per-personality so that
+            # switching personas updates the editable prompt to that persona's
+            # built-in text (config flow can't react live to the dropdown).
+            if CONF_PERSONALITY_PROMPT in user_input:
+                sub_personality = user_input.get(
+                    CONF_PERSONALITY, DEFAULT_PERSONALITY
+                )
+                sub_prompt = user_input.pop(CONF_PERSONALITY_PROMPT)
+                builtin = (personalities.get(sub_personality, {}) or {}).get(
+                    "prompt", ""
+                )
+                prompts = dict(user_input.get(CONF_PERSONALITY_PROMPTS, {}) or {})
+                if sub_prompt and sub_prompt != builtin:
+                    prompts[sub_personality] = sub_prompt
+                else:
+                    prompts.pop(sub_personality, None)
+                user_input[CONF_PERSONALITY_PROMPTS] = prompts
 
             # Normalize entity_aliases: "entity_id: alias" lines -> dict
             if CONF_ENTITY_ALIASES in user_input:
@@ -533,9 +556,6 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
         # Fetch models
         models = await self._fetch_models(entry)
         model_options = models or ["No models found"]
-
-        # Load personalities (built-in + shipped + user override)
-        personalities = build_personalities(self.hass)
 
         # Fetch available LLM APIs for HA control
         llm_apis = llm.async_get_apis(self.hass)
@@ -726,7 +746,7 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
             ),
             vol.Optional(
                 CONF_PERSONALITY_PROMPT,
-                default=options.get(CONF_PERSONALITY_PROMPT)
+                default=options.get(CONF_PERSONALITY_PROMPTS, {}).get(_personality)
                 or options.get(CONF_SYSTEM_PROMPT)
                 or personalities.get(_personality, {}).get("prompt", ""),
             ): TextSelector(

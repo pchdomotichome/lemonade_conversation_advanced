@@ -60,6 +60,7 @@ from .const import (
     CONF_INCLUDE_EXAMPLES,
     CONF_PERSONALITY_EXAMPLES,
     CONF_PERSONALITY_PROMPT,
+    CONF_PERSONALITY_PROMPTS,
     CONF_SARCASM_ENTITY,
     build_personalities,
     CONFIRMATION_INSTRUCTION,
@@ -210,7 +211,8 @@ class LemonadeConversationEntity(
             personality = PERSONALITY_CUSTOM if persona_text else PERSONALITY_DEFAULT
         else:
             persona_text = (
-                options.get(CONF_PERSONALITY_PROMPT)
+                options.get(CONF_PERSONALITY_PROMPTS, {}).get(personality)
+                or options.get(CONF_PERSONALITY_PROMPT)
                 or options.get(CONF_SYSTEM_PROMPT)
                 or personas.get(personality, {}).get("prompt", "")
             )

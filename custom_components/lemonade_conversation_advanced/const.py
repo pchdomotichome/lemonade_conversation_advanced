@@ -262,6 +262,7 @@ CONF_SARCASM_ENTITY = "sarcasm_entity"
 CONF_INCLUDE_EXAMPLES = "include_examples"
 CONF_PERSONALITY_EXAMPLES = "personality_examples"
 CONF_PERSONALITY_PROMPT = "personality_prompt"
+CONF_PERSONALITY_PROMPTS = "personality_prompts"
 DEFAULT_SARCASM_ENTITY = "input_select.sarcasm_level"
 DEFAULT_INCLUDE_EXAMPLES = False
 
