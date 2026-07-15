@@ -435,7 +435,7 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
 
         # Personalities (built-in + shipped + user override) — needed both for
         # rendering defaults and for normalizing the saved prompt per-personality.
-        personalities = build_personalities(self.hass)
+        personalities = await build_personalities(self.hass)
 
         if user_input is not None:
             # Sections nest their fields; flatten back into a single dict so

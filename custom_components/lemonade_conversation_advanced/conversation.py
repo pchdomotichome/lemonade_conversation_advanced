@@ -204,7 +204,7 @@ class LemonadeConversationEntity(
         # CONF_PERSONALITY_PROMPT takes precedence over the built-in text, so
         # users can tweak a persona without losing future updates.
         # Backward compatible: legacy subentries fall back to CONF_SYSTEM_PROMPT.
-        personas = build_personalities(self.hass)
+        personas = await build_personalities(self.hass)
         personality = options.get(CONF_PERSONALITY)
         if personality is None:
             persona_text = options.get(CONF_SYSTEM_PROMPT) or ""

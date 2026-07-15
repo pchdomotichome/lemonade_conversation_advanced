@@ -289,10 +289,11 @@ def _load_personalities_file(path: str) -> dict[str, Any]:
     return {}
 
 
-def build_personalities(hass: Any) -> dict[str, dict[str, str]]:
+async def build_personalities(hass: Any) -> dict[str, dict[str, str]]:
     """Merge built-in, shipped and user-override personalities.
 
     Returns a dict keyed by personality id with {"name", "prompt", "examples"}.
+    File reads are offloaded to an executor to avoid blocking the event loop.
     """
     merged: dict[str, dict[str, str]] = {}
     # 1) Code-built-ins (kept for backward compatibility)
@@ -303,7 +304,8 @@ def build_personalities(hass: Any) -> dict[str, dict[str, str]]:
             "examples": PERSONALITY_EXAMPLES.get(key, ""),
         }
     # 2) Shipped personalities.json (data-driven source of truth)
-    for key, value in _load_personalities_file(PERSONALITIES_FILE).items():
+    shipped = await hass.async_add_executor_job(_load_personalities_file, PERSONALITIES_FILE)
+    for key, value in shipped.items():
         if not isinstance(value, dict):
             continue
         merged[key] = {
@@ -313,7 +315,8 @@ def build_personalities(hass: Any) -> dict[str, dict[str, str]]:
         }
     # 3) User override (highest priority)
     override_path = hass.config.path(PERSONALITIES_OVERRIDE_DIR, PERSONALITIES_OVERRIDE_FILE)
-    for key, value in _load_personalities_file(override_path).items():
+    override = await hass.async_add_executor_job(_load_personalities_file, override_path)
+    for key, value in override.items():
         if not isinstance(value, dict):
             continue
         merged.setdefault(key, {})
