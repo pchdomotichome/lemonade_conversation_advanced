@@ -43,144 +43,144 @@
       "entry_type": "Agente de conversación",
       "step": {
         "set_options": {
-        "title": "Lemonade Conversation Advanced",
-        "description": "Configura el modelo, el contexto, el comportamiento y los tiempos de espera de este agente.",
-        "sections": {
-          "profile": {
-            "name": "👤 Perfil y Modelo",
-            "description": "Nombre, modelo y parámetros de generación.",
-            "data": {
-              "name": "Nombre",
-              "model_name": "Modelo",
-              "system_prompt": "Prompt del sistema",
-              "technical_prompt": "Instrucciones técnicas",
-              "temperature": "Temperatura (creatividad)",
-              "max_tokens": "Máx. tokens de respuesta",
-              "max_history": "Mensajes de historial máx.",
-              "response_mode": "Modo de respuesta",
-              "clean_responses": "Limpiar respuestas (salida de voz)",
-              "enable_streaming": "Activar streaming"
+          "title": "Lemonade Conversation Advanced",
+          "description": "Configura el modelo, el contexto, el comportamiento y los tiempos de espera de este agente.",
+          "sections": {
+            "profile": {
+              "name": "👤 Perfil y Modelo",
+              "description": "Nombre, modelo y parámetros de generación.",
+              "data": {
+                "name": "Nombre",
+                "model_name": "Modelo",
+                "system_prompt": "Prompt del sistema",
+                "technical_prompt": "Instrucciones técnicas",
+                "temperature": "Temperatura (creatividad)",
+                "max_tokens": "Máx. tokens de respuesta",
+                "max_history": "Mensajes de historial máx.",
+                "response_mode": "Modo de respuesta",
+                "clean_responses": "Limpiar respuestas (salida de voz)",
+                "enable_streaming": "Activar streaming"
+              },
+              "data_description": {
+                "name": "Nombre para mostrar de este agente (aparece en la lista de subentradas).",
+                "model_name": "Modelo LLM cargado en el servidor Lemonade.",
+                "system_prompt": "Instrucciones base de personalidad y comportamiento del asistente.",
+                "technical_prompt": "Instrucciones internas de razonamiento y uso de herramientas. Marcadores admitidos: time, date, current_area, index, response_mode (encierra cada uno entre llaves simples).",
+                "temperature": "0 = determinista, 2 = muy creativo.",
+                "max_tokens": "Longitud máxima de la respuesta generada.",
+                "max_history": "Número de turnos recientes de conversación a conservar como contexto.",
+                "response_mode": "Controla las preguntas de seguimiento y el fin de la conversación.",
+                "clean_responses": "Elimina emojis y caracteres especiales para una salida limpia de texto a voz.",
+                "enable_streaming": "Envía la respuesta token a token. Desactívalo para depurar el modo sin streaming."
+              }
             },
-            "data_description": {
-              "name": "Nombre para mostrar de este agente (aparece en la lista de subentradas).",
-              "model_name": "Modelo LLM cargado en el servidor Lemonade.",
-              "system_prompt": "Instrucciones base de personalidad y comportamiento del asistente.",
-              "technical_prompt": "Instrucciones internas de razonamiento y uso de herramientas. Marcadores admitidos: time, date, current_area, index, response_mode (encierra cada uno entre llaves simples).",
-              "temperature": "0 = determinista, 2 = muy creativo.",
-              "max_tokens": "Longitud máxima de la respuesta generada.",
-              "max_history": "Número de turnos recientes de conversación a conservar como contexto.",
-              "response_mode": "Controla las preguntas de seguimiento y el fin de la conversación.",
-              "clean_responses": "Elimina emojis y caracteres especiales para una salida limpia de texto a voz.",
-              "enable_streaming": "Envía la respuesta token a token. Desactívalo para depurar el modo sin streaming."
-            }
-          },
-          "context": {
-            "name": "🧠 Contexto",
-            "description": "Contexto dinámico inyectado mediante plantillas Jinja2.",
-            "data": {
-              "context_templates": "Plantillas de contexto (Jinja2)"
+            "context": {
+              "name": "🧠 Contexto",
+              "description": "Contexto dinámico inyectado mediante plantillas Jinja2.",
+              "data": {
+                "context_templates": "Plantillas de contexto (Jinja2)"
+              },
+              "data_description": {
+                "context_templates": "Una plantilla Jinja2 por línea, renderizada e inyectada como contexto dinámico. Ejemplo: una línea que imprime la hora actual con now().strftime."
+              }
             },
-            "data_description": {
-              "context_templates": "Una plantilla Jinja2 por línea, renderizada e inyectada como contexto dinámico. Ejemplo: una línea que imprime la hora actual con now().strftime."
-            }
-          },
-          "entities": {
-            "name": "🏠 Entidades y Dominios",
-            "description": "Qué entidades y dominios puede ver y controlar el asistente.",
-            "data": {
-              "enabled_domains": "Dominios habilitados",
-              "entity_aliases": "Alias de entidades",
-              "max_entities_per_discovery": "Máx. entidades por descubrimiento",
-              "respect_exposure": "Respetar exposición de entidades"
+            "entities": {
+              "name": "🏠 Entidades y Dominios",
+              "description": "Qué entidades y dominios puede ver y controlar el asistente.",
+              "data": {
+                "enabled_domains": "Dominios habilitados",
+                "entity_aliases": "Alias de entidades",
+                "max_entities_per_discovery": "Máx. entidades por descubrimiento",
+                "respect_exposure": "Respetar exposición de entidades"
+              },
+              "data_description": {
+                "enabled_domains": "Limita qué dominios puede ver y controlar el LLM.",
+                "entity_aliases": "Uno por línea, formato: entity_id: alias (p. ej. 'light.bedside: luz de mesita').",
+                "max_entities_per_discovery": "Tope de entidades devueltas por llamada de descubrimiento (20-500).",
+                "respect_exposure": "Solo accede a las entidades expuestas a este asistente (predeterminado de Home Assistant)."
+              }
             },
-            "data_description": {
-              "enabled_domains": "Limita qué dominios puede ver y controlar el LLM.",
-              "entity_aliases": "Uno por línea, formato: entity_id: alias (p. ej. 'light.bedside: luz de mesita').",
-              "max_entities_per_discovery": "Tope de entidades devueltas por llamada de descubrimiento (20-500).",
-              "respect_exposure": "Solo accede a las entidades expuestas a este asistente (predeterminado de Home Assistant)."
-            }
-          },
-          "behaviour": {
-            "name": "🎛️ Control y Comportamiento",
-            "description": "Control de Home Assistant, confirmación y exposición de herramientas.",
-            "data": {
-              "control_home_assistant": "Controlar Home Assistant",
-              "llm_hass_api": "API LLM de Home Assistant",
-              "confirmation_required": "Requerir confirmación",
-              "expose_scripts": "Exponer scripts",
-              "expose_scenes": "Exponer escenas",
-              "max_iterations": "Máx. iteraciones de herramientas"
+            "behaviour": {
+              "name": "🎛️ Control y Comportamiento",
+              "description": "Control de Home Assistant, confirmación y exposición de herramientas.",
+              "data": {
+                "control_home_assistant": "Controlar Home Assistant",
+                "llm_hass_api": "API LLM de Home Assistant",
+                "confirmation_required": "Requerir confirmación",
+                "expose_scripts": "Exponer scripts",
+                "expose_scenes": "Exponer escenas",
+                "max_iterations": "Máx. iteraciones de herramientas"
+              },
+              "data_description": {
+                "control_home_assistant": "Permite al LLM llamar a herramientas de Home Assistant para controlar dispositivos.",
+                "llm_hass_api": "Qué API LLM de Home Assistant expone herramientas a este agente.",
+                "confirmation_required": "Pide confirmación al usuario antes de realizar cualquier acción de control (encender/apagar, ejecutar scripts, activar escenas).",
+                "expose_scripts": "Da al LLM una herramienta 'run_script' para ejecutar scripts de Home Assistant por entity_id.",
+                "expose_scenes": "Da al LLM una herramienta 'activate_scene' para activar escenas de Home Assistant por entity_id.",
+                "max_iterations": "Número máximo de bucles de llamadas a herramientas por respuesta."
+              }
             },
-            "data_description": {
-              "control_home_assistant": "Permite al LLM llamar a herramientas de Home Assistant para controlar dispositivos.",
-              "llm_hass_api": "Qué API LLM de Home Assistant expone herramientas a este agente.",
-              "confirmation_required": "Pide confirmación al usuario antes de realizar cualquier acción de control (encender/apagar, ejecutar scripts, activar escenas).",
-              "expose_scripts": "Da al LLM una herramienta 'run_script' para ejecutar scripts de Home Assistant por entity_id.",
-              "expose_scenes": "Da al LLM una herramienta 'activate_scene' para activar escenas de Home Assistant por entity_id.",
-              "max_iterations": "Número máximo de bucles de llamadas a herramientas por respuesta."
-            }
-          },
-          "web_search": {
-            "name": "🌐 Búsqueda web",
-            "description": "Búsqueda web auto-alojada mediante SearXNG.",
-            "data": {
-              "enable_web_search": "Activar búsqueda web (SearXNG)",
-              "searxng_url": "URL de SearXNG",
-              "searxng_engines": "Motores de SearXNG",
-              "searxng_max_results": "Máx. resultados de SearXNG"
+            "web_search": {
+              "name": "🌐 Búsqueda web",
+              "description": "Búsqueda web auto-alojada mediante SearXNG.",
+              "data": {
+                "enable_web_search": "Activar búsqueda web (SearXNG)",
+                "searxng_url": "URL de SearXNG",
+                "searxng_engines": "Motores de SearXNG",
+                "searxng_max_results": "Máx. resultados de SearXNG"
+              },
+              "data_description": {
+                "enable_web_search": "Permite al LLM buscar en la web usando tu instancia local de SearXNG (totalmente auto-alojada, sin API externa).",
+                "searxng_url": "URL base de tu instancia SearXNG (p. ej. http://10.0.98.x:8080). El formato JSON debe estar habilitado en su settings.yml.",
+                "searxng_engines": "Motores separados por comas para restringir la búsqueda (p. ej. google,duckduckgo). Vacío = todos.",
+                "searxng_max_results": "Número máximo de resultados devueltos al LLM (1-20)."
+              }
             },
-            "data_description": {
-              "enable_web_search": "Permite al LLM buscar en la web usando tu instancia local de SearXNG (totalmente auto-alojada, sin API externa).",
-              "searxng_url": "URL base de tu instancia SearXNG (p. ej. http://10.0.98.x:8080). El formato JSON debe estar habilitado en su settings.yml.",
-              "searxng_engines": "Motores separados por comas para restringir la búsqueda (p. ej. google,duckduckgo). Vacío = todos.",
-              "searxng_max_results": "Número máximo de resultados devueltos al LLM (1-20)."
-            }
-          },
-          "rag": {
-            "name": "📚 RAG",
-            "description": "Contexto aumentado por recuperación desde el índice local.",
-            "data": {
-              "enable_rag": "Activar RAG",
-              "rag_top_k": "RAG Top K"
+            "rag": {
+              "name": "📚 RAG",
+              "description": "Contexto aumentado por recuperación desde el índice local.",
+              "data": {
+                "enable_rag": "Activar RAG",
+                "rag_top_k": "RAG Top K"
+              },
+              "data_description": {
+                "enable_rag": "Recupera contexto del hogar del índice RAG local para responder preguntas.",
+                "rag_top_k": "Número de fragmentos de contexto recuperados para RAG."
+              }
             },
-            "data_description": {
-              "enable_rag": "Recupera contexto del hogar del índice RAG local para responder preguntas.",
-              "rag_top_k": "Número de fragmentos de contexto recuperados para RAG."
-            }
-          },
-          "follow_up": {
-            "name": "💬 Seguimiento",
-            "description": "Frases de seguimiento y de fin de conversación.",
-            "data": {
-              "follow_up_phrases": "Frases de seguimiento",
-              "end_words": "Palabras para terminar"
+            "follow_up": {
+              "name": "💬 Seguimiento",
+              "description": "Frases de seguimiento y de fin de conversación.",
+              "data": {
+                "follow_up_phrases": "Frases de seguimiento",
+                "end_words": "Palabras para terminar"
+              },
+              "data_description": {
+                "follow_up_phrases": "Frases separadas por comas que el LLM puede usar para continuar la conversación.",
+                "end_words": "Palabras separadas por comas que el usuario puede decir para terminar la conversación."
+              }
             },
-            "data_description": {
-              "follow_up_phrases": "Frases separadas por comas que el LLM puede usar para continuar la conversación.",
-              "end_words": "Palabras separadas por comas que el usuario puede decir para terminar la conversación."
-            }
-          },
-          "advanced": {
-            "name": "⚙️ Avanzado",
-            "description": "Depuración, tiempos de espera y reintentos.",
-            "data": {
-              "debug_mode": "Modo depuración",
-              "request_timeout": "Tiempo de espera de petición (s)",
-              "connect_timeout": "Tiempo de espera de conexión (s)",
-              "first_delta_timeout": "Tiempo de primer token (s)",
-              "max_retries": "Máx. reintentos",
-              "retry_backoff": "Espera entre reintentos (s)"
-            },
-            "data_description": {
-              "debug_mode": "Registra prompts y llamadas a herramientas detalladas en el registro de Home Assistant.",
-              "request_timeout": "Tiempo de espera total de la petición HTTP.",
-              "connect_timeout": "Tiempo de espera de conexión TCP.",
-              "first_delta_timeout": "Espera máxima del primer token en streaming (cae a modo sin streaming si se excede).",
-              "max_retries": "Intentos de reintento ante fallo de conexión.",
-              "retry_backoff": "Segundos base de espera entre reintentos (exponencial)."
+            "advanced": {
+              "name": "⚙️ Avanzado",
+              "description": "Depuración, tiempos de espera y reintentos.",
+              "data": {
+                "debug_mode": "Modo depuración",
+                "request_timeout": "Tiempo de espera de petición (s)",
+                "connect_timeout": "Tiempo de espera de conexión (s)",
+                "first_delta_timeout": "Tiempo de primer token (s)",
+                "max_retries": "Máx. reintentos",
+                "retry_backoff": "Espera entre reintentos (s)"
+              },
+              "data_description": {
+                "debug_mode": "Registra prompts y llamadas a herramientas detalladas en el registro de Home Assistant.",
+                "request_timeout": "Tiempo de espera total de la petición HTTP.",
+                "connect_timeout": "Tiempo de espera de conexión TCP.",
+                "first_delta_timeout": "Espera máxima del primer token en streaming (cae a modo sin streaming si se excede).",
+                "max_retries": "Intentos de reintento ante fallo de conexión.",
+                "retry_backoff": "Segundos base de espera entre reintentos (exponencial)."
+              }
             }
           }
-        }
         }
       }
     },
@@ -193,22 +193,50 @@
       "step": {
         "set_options": {
           "title": "Tarea IA Lemonade",
-          "description": "Configura el modelo y los parámetros para la generación de Tareas IA.",
-          "data": {
-            "name": "Nombre",
-            "model_name": "Modelo",
-            "system_prompt": "Prompt del sistema",
-            "temperature": "Temperatura (creatividad)",
-            "max_tokens": "Máx. tokens de respuesta",
-            "request_timeout": "Tiempo de espera de petición (s)"
-          },
-          "data_description": {
-            "name": "Nombre para mostrar de esta tarea IA (aparece en la lista de subentradas).",
-            "model_name": "Modelo LLM cargado en el servidor Lemonade.",
-            "system_prompt": "Instrucciones base para la generación de Tareas IA.",
-            "temperature": "0 = determinista, 2 = muy creativo.",
-            "max_tokens": "Longitud máxima de la respuesta generada.",
-            "request_timeout": "Tiempo de espera total de la petición HTTP."
+          "description": "Configura el modelo y las opciones de salida estructurada para la generación de Tareas IA.",
+          "sections": {
+            "profile": {
+              "name": "👤 Perfil y modelo",
+              "description": "Nombre, modelo y parámetros de generación.",
+              "data": {
+                "name": "Nombre",
+                "model_name": "Modelo",
+                "system_prompt": "Prompt del sistema",
+                "temperature": "Temperatura (creatividad)",
+                "max_tokens": "Máx. tokens de respuesta"
+              },
+              "data_description": {
+                "name": "Nombre para mostrar de esta tarea IA (aparece en la lista de subentradas).",
+                "model_name": "Modelo LLM cargado en el servidor Lemonade.",
+                "system_prompt": "Instrucciones base para la generación de Tareas IA.",
+                "temperature": "0 = determinista, 2 = muy creativo.",
+                "max_tokens": "Longitud máxima de la respuesta generada."
+              }
+            },
+            "structured": {
+              "name": "🧩 Salida estructurada",
+              "description": "Cómo extraer datos estructurados del modelo cuando la tarea pide un esquema.",
+              "data": {
+                "ai_task_extraction_method": "Método de extracción",
+                "ai_task_retries": "Número de reintentos",
+                "ai_task_enable_vision": "Habilitar visión / adjuntos"
+              },
+              "data_description": {
+                "ai_task_extraction_method": "Ninguno = texto crudo. Salida estructurada = pedir JSON que cumpla el esquema. Llamada de herramienta = el modelo llama a una función submit_response (más fiable con algunos modelos).",
+                "ai_task_retries": "Intentos extra si el modelo devuelve datos malformados o inválidos. Se le devuelve el error para que se corrija.",
+                "ai_task_enable_vision": "Anunciar soporte de adjuntos y pasar imágenes al modelo. Actívalo solo si el modelo es multimodal."
+              }
+            },
+            "advanced": {
+              "name": "⚙️ Avanzado",
+              "description": "Tiempos de espera de la petición.",
+              "data": {
+                "request_timeout": "Tiempo de espera de petición (s)"
+              },
+              "data_description": {
+                "request_timeout": "Tiempo de espera total de la petición HTTP."
+              }
+            }
           }
         }
       }

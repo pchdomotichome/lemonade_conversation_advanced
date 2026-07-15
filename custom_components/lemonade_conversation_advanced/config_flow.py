@@ -32,6 +32,12 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    AI_TASK_EXTRACTION_NONE,
+    AI_TASK_EXTRACTION_STRUCTURE,
+    AI_TASK_EXTRACTION_TOOL,
+    CONF_AI_TASK_ENABLE_VISION,
+    CONF_AI_TASK_EXTRACTION_METHOD,
+    CONF_AI_TASK_RETRIES,
     CONF_API_KEY,
     CONF_CLEAN_RESPONSES,
     CONF_CONFIRMATION_REQUIRED,
@@ -68,6 +74,9 @@ from .const import (
     CONF_SYSTEM_PROMPT,
     CONF_TECHNICAL_PROMPT,
     CONF_TEMPERATURE,
+    DEFAULT_AI_TASK_EXTRACTION_METHOD,
+    DEFAULT_AI_TASK_RETRIES,
+    DEFAULT_AI_TASK_SYSTEM_PROMPT,
     DEFAULT_CLEAN_RESPONSES,
     DEFAULT_CONFIRMATION_REQUIRED,
     DEFAULT_CONNECT_TIMEOUT,
@@ -107,6 +116,8 @@ from .const import (
     MAX_SEARXNG_MAX_RESULTS,
     MIN_SEARXNG_MAX_RESULTS,
     SUPPORTED_DOMAINS,
+    MAX_AI_TASK_RETRIES,
+    MIN_AI_TASK_RETRIES,
     MAX_CONNECT_TIMEOUT,
     MAX_FIRST_DELTA_TIMEOUT,
     MAX_MAX_HISTORY,
@@ -165,9 +176,13 @@ DEFAULT_CONVERSATION_DATA = {
 }
 
 DEFAULT_AI_TASK_DATA = {
-    CONF_SYSTEM_PROMPT: "You are a helpful assistant.",
+    CONF_SYSTEM_PROMPT: DEFAULT_AI_TASK_SYSTEM_PROMPT,
     CONF_TEMPERATURE: 0.7,
     CONF_MAX_TOKENS: 2048,
+    CONF_AI_TASK_EXTRACTION_METHOD: DEFAULT_AI_TASK_EXTRACTION_METHOD,
+    CONF_AI_TASK_RETRIES: DEFAULT_AI_TASK_RETRIES,
+    CONF_AI_TASK_ENABLE_VISION: False,
+    CONF_REQUEST_TIMEOUT: DEFAULT_REQUEST_TIMEOUT,
 }
 
 
@@ -417,9 +432,18 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                 CONF_CONFIRMATION_REQUIRED,
                 CONF_EXPOSE_SCRIPTS,
                 CONF_EXPOSE_SCENES,
+                CONF_AI_TASK_ENABLE_VISION,
             ):
                 if key in user_input:
                     user_input[key] = user_input[key] in ("1", True, "true")
+
+            if CONF_AI_TASK_RETRIES in user_input:
+                try:
+                    user_input[CONF_AI_TASK_RETRIES] = int(
+                        user_input[CONF_AI_TASK_RETRIES]
+                    )
+                except (ValueError, TypeError):
+                    user_input[CONF_AI_TASK_RETRIES] = DEFAULT_AI_TASK_RETRIES
 
             # Normalize context_templates: text -> list (one template per line)
             if CONF_CONTEXT_TEMPLATES in user_input:
@@ -509,6 +533,156 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
             )
         else:
             default_name = self._get_reconfigure_subentry().title
+
+        # ── AI Task: dedicated reduced schema ───────────────────
+        if self._subentry_type == "ai_task":
+            return self.async_show_form(
+                step_id="set_options",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required("profile"): section(
+                            vol.Schema(
+                                {
+                                    vol.Required(
+                                        CONF_NAME, default=default_name
+                                    ): TextSelector(
+                                        TextSelectorConfig(
+                                            type=TextSelectorType.TEXT
+                                        )
+                                    ),
+                                    vol.Required(
+                                        CONF_MODEL_NAME,
+                                        default=options.get(CONF_MODEL_NAME),
+                                    ): SelectSelector(
+                                        SelectSelectorConfig(
+                                            options=[
+                                                SelectOptionDict(value=m, label=m)
+                                                for m in model_options
+                                            ],
+                                            mode=SelectSelectorMode.DROPDOWN,
+                                            sort=True,
+                                        )
+                                    ),
+                                    vol.Optional(
+                                        CONF_SYSTEM_PROMPT,
+                                        default=options.get(
+                                            CONF_SYSTEM_PROMPT,
+                                            DEFAULT_AI_TASK_SYSTEM_PROMPT,
+                                        ),
+                                    ): TextSelector(
+                                        TextSelectorConfig(
+                                            type=TextSelectorType.TEXT,
+                                            multiline=True,
+                                        )
+                                    ),
+                                    vol.Optional(
+                                        CONF_TEMPERATURE,
+                                        default=options.get(
+                                            CONF_TEMPERATURE, DEFAULT_TEMPERATURE
+                                        ),
+                                    ): NumberSelector(
+                                        NumberSelectorConfig(
+                                            min=MIN_TEMPERATURE,
+                                            max=MAX_TEMPERATURE,
+                                            step=0.1,
+                                            mode=NumberSelectorMode.SLIDER,
+                                        )
+                                    ),
+                                    vol.Optional(
+                                        CONF_MAX_TOKENS,
+                                        default=options.get(
+                                            CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS
+                                        ),
+                                    ): NumberSelector(
+                                        NumberSelectorConfig(
+                                            min=MIN_MAX_TOKENS,
+                                            max=MAX_MAX_TOKENS,
+                                            step=256,
+                                            mode=NumberSelectorMode.BOX,
+                                        )
+                                    ),
+                                }
+                            ),
+                            {"collapsed": False},
+                        ),
+                        # ── 🧩 Structured output ────────────────────
+                        vol.Required("structured"): section(
+                            vol.Schema(
+                                {
+                                    vol.Optional(
+                                        CONF_AI_TASK_EXTRACTION_METHOD,
+                                        default=options.get(
+                                            CONF_AI_TASK_EXTRACTION_METHOD,
+                                            DEFAULT_AI_TASK_EXTRACTION_METHOD,
+                                        ),
+                                    ): SelectSelector(
+                                        SelectSelectorConfig(
+                                            options=[
+                                                SelectOptionDict(
+                                                    value=AI_TASK_EXTRACTION_NONE,
+                                                    label="None (raw text)",
+                                                ),
+                                                SelectOptionDict(
+                                                    value=AI_TASK_EXTRACTION_STRUCTURE,
+                                                    label="Structured output (JSON)",
+                                                ),
+                                                SelectOptionDict(
+                                                    value=AI_TASK_EXTRACTION_TOOL,
+                                                    label="Tool call",
+                                                ),
+                                            ],
+                                            mode=SelectSelectorMode.DROPDOWN,
+                                        )
+                                    ),
+                                    vol.Optional(
+                                        CONF_AI_TASK_RETRIES,
+                                        default=options.get(
+                                            CONF_AI_TASK_RETRIES,
+                                            DEFAULT_AI_TASK_RETRIES,
+                                        ),
+                                    ): NumberSelector(
+                                        NumberSelectorConfig(
+                                            min=MIN_AI_TASK_RETRIES,
+                                            max=MAX_AI_TASK_RETRIES,
+                                            step=1,
+                                            mode=NumberSelectorMode.BOX,
+                                        )
+                                    ),
+                                    vol.Optional(
+                                        CONF_AI_TASK_ENABLE_VISION,
+                                        default=_bool(
+                                            CONF_AI_TASK_ENABLE_VISION, False
+                                        ),
+                                    ): BooleanSelector(),
+                                }
+                            ),
+                            {"collapsed": False},
+                        ),
+                        # ── ⚙️ Advanced ─────────────────────────────
+                        vol.Required("advanced"): section(
+                            vol.Schema(
+                                {
+                                    vol.Optional(
+                                        CONF_REQUEST_TIMEOUT,
+                                        default=options.get(
+                                            CONF_REQUEST_TIMEOUT,
+                                            DEFAULT_REQUEST_TIMEOUT,
+                                        ),
+                                    ): NumberSelector(
+                                        NumberSelectorConfig(
+                                            min=MIN_REQUEST_TIMEOUT,
+                                            max=MAX_REQUEST_TIMEOUT,
+                                            step=5,
+                                            mode=NumberSelectorMode.BOX,
+                                        )
+                                    ),
+                                }
+                            ),
+                            {"collapsed": True},
+                        ),
+                    }
+                ),
+            )
 
         return self.async_show_form(
             step_id="set_options",

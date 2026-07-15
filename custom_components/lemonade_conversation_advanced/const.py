@@ -64,6 +64,26 @@ CONF_CUSTOM_SCENES = "custom_scenes"
 CONF_EXPOSE_SCRIPTS = "expose_scripts"
 CONF_EXPOSE_SCENES = "expose_scenes"
 
+# AI Task (structured data generation via ai_task.generate_data)
+CONF_AI_TASK_EXTRACTION_METHOD = "ai_task_extraction_method"
+CONF_AI_TASK_RETRIES = "ai_task_retries"
+CONF_AI_TASK_ENABLE_VISION = "ai_task_enable_vision"
+
+# Extraction method values
+AI_TASK_EXTRACTION_NONE = "none"
+AI_TASK_EXTRACTION_STRUCTURE = "structure"
+AI_TASK_EXTRACTION_TOOL = "tool"
+
+DEFAULT_AI_TASK_EXTRACTION_METHOD = AI_TASK_EXTRACTION_STRUCTURE
+DEFAULT_AI_TASK_RETRIES = 2
+DEFAULT_AI_TASK_ENABLE_VISION = False
+DEFAULT_AI_TASK_SYSTEM_PROMPT = (
+    "You are a helpful assistant that generates structured data. "
+    "Follow the requested output format exactly."
+)
+MIN_AI_TASK_RETRIES: Final = 0
+MAX_AI_TASK_RETRIES: Final = 5
+
 # Web search (local, self-hosted via SearXNG)
 CONF_ENABLE_WEB_SEARCH = "enable_web_search"
 CONF_SEARXNG_URL = "searxng_url"
