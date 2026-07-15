@@ -263,7 +263,7 @@ CONF_INCLUDE_EXAMPLES = "include_examples"
 CONF_PERSONALITY_EXAMPLES = "personality_examples"
 CONF_PERSONALITY_PROMPT = "personality_prompt"
 CONF_PERSONALITY_PROMPTS = "personality_prompts"
-DEFAULT_SARCASM_ENTITY = "input_select.sarcasm_level"
+DEFAULT_SARCASM_ENTITY = "select.lemonade_sarcasm_level"
 DEFAULT_INCLUDE_EXAMPLES = False
 
 # Personality data files. Built-in personalities ship inside the integration;

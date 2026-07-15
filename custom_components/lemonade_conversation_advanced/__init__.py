@@ -15,7 +15,7 @@ from .rag import RAGIndex
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.CONVERSATION, Platform.AI_TASK]
+PLATFORMS = [Platform.CONVERSATION, Platform.AI_TASK, Platform.SELECT]
 
 
 def get_system_entry(hass: HomeAssistant) -> ConfigEntry | None:
