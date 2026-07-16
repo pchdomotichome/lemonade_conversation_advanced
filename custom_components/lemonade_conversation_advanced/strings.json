@@ -54,160 +54,198 @@
       },
       "entry_type": "Conversation agent",
       "step": {
-        "set_options": {
-          "title": "Lemonade Conversation Advanced",
-          "description": "Configure model, context, behavior and timeouts for this agent.",
-          "sections": {
-            "profile": {
-              "name": "👤 Profile & Model",
-              "description": "Name, model and generation parameters.",
-              "data": {
-                "name": "Name",
-                "model_name": "Model",
-                "technical_prompt": "Technical Instructions",
-                "temperature": "Temperature (creativity)",
-                "max_tokens": "Max Response Tokens",
-                "max_history": "Max History Messages",
-                "response_mode": "Response Mode",
-                "clean_responses": "Clean Responses (voice output)",
-                "enable_streaming": "Enable Streaming"
-              },
-              "data_description": {
-                "name": "Display name for this agent (shown in the subentry list).",
-                "model_name": "LLM model loaded on the Lemonade server.",
-                "technical_prompt": "Internal reasoning and tool-use instructions. Supported placeholders: time, date, current_area, index, response_mode (wrap each in single curly braces).",
-                "temperature": "0 = deterministic, 2 = very creative.",
-                "max_tokens": "Maximum length of the generated response.",
-                "max_history": "Number of recent conversation turns to keep as context.",
-                "response_mode": "Controls follow-up questions and conversation ending behavior.",
-                "clean_responses": "Strip emojis and special characters so the response is clean for text-to-speech.",
-                "enable_streaming": "Stream the response token-by-token. Turn off to debug non-streaming fallback."
-              }
-            },
-            "personalidad": {
-              "name": "🎭 Personalidad",
-              "description": "Persona, editable prompt, dynamic sarcasm tone and examples.",
-              "data": {
-                "personality": "Personality",
-                "personality_prompt": "Personality Prompt (editable)",
-                "sarcasm_entity": "Sarcasm Level Entity",
-                "include_examples": "Include Examples",
-                "personality_examples": "Personality Examples"
-              },
-              "data_description": {
-                "personality": "Choose a predefined assistant persona. Options include any persona defined in personalities.json or your personalities_override.json.",
-                "personality_prompt": "Editable base prompt for the selected persona. Pre-filled from the persona; modify to tune behavior. Stored per agent.",
-                "sarcasm_entity": "Entity (input_select or sensor) whose state sets the sarcasm intensity for the Sarcastic Argentine persona. Values: Normal, Bajo, Medio, Alto.",
-                "include_examples": "Append predefined example dialogues (per personality) to the system prompt to steer small models toward the desired tone.",
-                "personality_examples": "Example Q&A used as style guidance. Pre-filled from the selected personality; edit freely."
-              }
-            },
-            "context": {
-              "name": "🧠 Context",
-              "description": "Dynamic context injected via Jinja2 templates.",
-              "data": {
-                "context_templates": "Context Templates (Jinja2)"
-              },
-              "data_description": {
-                "context_templates": "One Jinja2 template per line, rendered and injected as dynamic context. Example: a line printing the current time with now().strftime."
-              }
-            },
-            "entities": {
-              "name": "🏠 Entities & Domains",
-              "description": "Which entities and domains the assistant can see and control.",
-              "data": {
-                "enabled_domains": "Enabled Domains",
-                "entity_aliases": "Entity Aliases",
-                "max_entities_per_discovery": "Max Entities Per Discovery",
-                "respect_exposure": "Respect Entity Exposure"
-              },
-              "data_description": {
-                "enabled_domains": "Limit which domains the LLM can see and control.",
-                "entity_aliases": "One per line, format: entity_id: alias (e.g. 'light.bedside: luz de mesita').",
-                "max_entities_per_discovery": "Cap on entities returned per discovery call (20-500).",
-                "respect_exposure": "Only access entities exposed to this assistant (Home Assistant default)."
-              }
-            },
-            "behaviour": {
-              "name": "🎛️ Control & Behaviour",
-              "description": "Home Assistant control, confirmation and tool exposure.",
-              "data": {
-                "control_home_assistant": "Control Home Assistant",
-                "llm_hass_api": "Home Assistant LLM API",
-                "confirmation_required": "Require Confirmation",
-                "expose_scripts": "Expose Scripts",
-                "expose_scenes": "Expose Scenes",
-                "max_iterations": "Max Tool Iterations"
-              },
-              "data_description": {
-                "control_home_assistant": "Allow the LLM to call Home Assistant tools to control devices.",
-                "llm_hass_api": "Which Home Assistant LLM API exposes tools to this agent.",
-                "confirmation_required": "Ask the user to confirm before performing any control action (turning devices on/off, running scripts, activating scenes).",
-                "expose_scripts": "Give the LLM a 'run_script' tool to run Home Assistant scripts by entity_id.",
-                "expose_scenes": "Give the LLM an 'activate_scene' tool to activate Home Assistant scenes by entity_id.",
-                "max_iterations": "Maximum number of tool-call loops per response."
-              }
-            },
-            "web_search": {
-              "name": "🌐 Web Search",
-              "description": "Self-hosted web search via SearXNG.",
-              "data": {
-                "enable_web_search": "Enable Web Search (SearXNG)",
-                "searxng_url": "SearXNG URL",
-                "searxng_engines": "SearXNG Engines",
-                "searxng_max_results": "SearXNG Max Results"
-              },
-              "data_description": {
-                "enable_web_search": "Allow the LLM to search the web using your local SearXNG instance (fully self-hosted, no external API).",
-                "searxng_url": "Base URL of your SearXNG instance (e.g. http://10.0.98.x:8080). JSON format must be enabled in its settings.yml.",
-                "searxng_engines": "Optional comma-separated engines to restrict the search (e.g. google,duckduckgo). Leave empty for all.",
-                "searxng_max_results": "Maximum number of search results returned to the LLM (1-20)."
-              }
-            },
-            "rag": {
-              "name": "📚 RAG",
-              "description": "Retrieval-augmented context from the local index.",
-              "data": {
-                "enable_rag": "Enable RAG",
-                "rag_top_k": "RAG Top K"
-              },
-              "data_description": {
-                "enable_rag": "Retrieve relevant home context from the local RAG index to answer questions.",
-                "rag_top_k": "Number of context chunks retrieved for RAG."
-              }
-            },
-            "follow_up": {
-              "name": "💬 Follow-up",
-              "description": "Follow-up and end-of-conversation phrases.",
-              "data": {
-                "follow_up_phrases": "Follow-up Phrases",
-                "end_words": "End Conversation Words"
-              },
-              "data_description": {
-                "follow_up_phrases": "Comma-separated phrases the LLM may use to keep the conversation going.",
-                "end_words": "Comma-separated words the user can say to end the conversation."
-              }
-            },
-            "advanced": {
-              "name": "⚙️ Advanced",
-              "description": "Debug, timeouts and retries.",
-              "data": {
-                "debug_mode": "Debug Mode",
-                "request_timeout": "Request Timeout (seconds)",
-                "connect_timeout": "Connect Timeout (seconds)",
-                "first_delta_timeout": "First Delta Timeout (seconds)",
-                "max_retries": "Max Retries",
-                "retry_backoff": "Retry Backoff (seconds)"
-              },
-              "data_description": {
-                "debug_mode": "Log detailed prompts and tool calls to the Home Assistant log.",
-                "request_timeout": "Overall HTTP request timeout.",
-                "connect_timeout": "TCP connect timeout.",
-                "first_delta_timeout": "Max wait for the first streamed token (falls back to non-streaming if exceeded).",
-                "max_retries": "Retry attempts on connection failure.",
-                "retry_backoff": "Base backoff seconds between retries (exponential)."
-              }
-            }
+        "user": {
+          "title": "New conversation agent",
+          "description": "Create the agent with the essentials. Everything else uses sensible defaults and can be adjusted later via Reconfigure.",
+          "data": {
+            "name": "Name",
+            "model_name": "Model",
+            "personality": "Personality"
+          },
+          "data_description": {
+            "name": "Display name for this agent (shown in the subentry list).",
+            "model_name": "LLM model loaded on the Lemonade server.",
+            "personality": "Initial assistant persona. You can change it and tune the prompt later."
+          }
+        },
+        "menu": {
+          "title": "Reconfigure conversation agent",
+          "description": "Pick a section to edit. Each section saves and returns here.",
+          "menu_options": {
+            "profile": "👤 Profile & Model",
+            "personalidad": "🎭 Personality",
+            "entities": "🏠 Entities & Domains",
+            "aliases": "🏷️ Entity Aliases",
+            "templates": "🧠 Context Templates",
+            "behaviour": "🎛️ Control & Behaviour",
+            "web_search": "🌐 Web Search",
+            "rag": "📚 RAG",
+            "follow_up": "💬 Follow-up",
+            "advanced": "⚙️ Advanced"
+          }
+        },
+        "profile": {
+          "title": "👤 Profile & Model",
+          "description": "Name, model and generation parameters.",
+          "data": {
+            "name": "Name",
+            "model_name": "Model",
+            "technical_prompt": "Technical Instructions",
+            "temperature": "Temperature (creativity)",
+            "max_tokens": "Max Response Tokens",
+            "max_history": "Max History Messages",
+            "response_mode": "Response Mode",
+            "clean_responses": "Clean Responses (voice output)",
+            "enable_streaming": "Enable Streaming"
+          },
+          "data_description": {
+            "name": "Display name for this agent (shown in the subentry list).",
+            "model_name": "LLM model loaded on the Lemonade server.",
+            "technical_prompt": "Internal reasoning and tool-use instructions. Supported placeholders: time, date, current_area, index, response_mode (wrap each in single curly braces).",
+            "temperature": "0 = deterministic, 2 = very creative.",
+            "max_tokens": "Maximum length of the generated response.",
+            "max_history": "Number of recent conversation turns to keep as context.",
+            "response_mode": "Controls follow-up questions and conversation ending behavior.",
+            "clean_responses": "Strip emojis and special characters so the response is clean for text-to-speech.",
+            "enable_streaming": "Stream the response token-by-token. Turn off to debug non-streaming fallback."
+          }
+        },
+        "personalidad": {
+          "title": "🎭 Personality",
+          "description": "Persona, editable prompt, dynamic sarcasm tone and examples.",
+          "data": {
+            "personality": "Personality",
+            "personality_prompt": "Personality Prompt (editable)",
+            "sarcasm_entity": "Sarcasm Level Entity",
+            "include_examples": "Include Examples",
+            "personality_examples": "Personality Examples"
+          },
+          "data_description": {
+            "personality": "Choose a predefined assistant persona. Options include any persona defined in personalities.json or your personalities_override.json.",
+            "personality_prompt": "Editable base prompt for the selected persona. Pre-filled from the persona; modify to tune behavior. Stored per agent.",
+            "sarcasm_entity": "Entity (select or sensor) whose state sets the sarcasm intensity for the Sarcastic Argentine persona. Values: Normal, Bajo, Medio, Alto. Default: select.lemonade_sarcasm_level.",
+            "include_examples": "Append predefined example dialogues (per personality) to the system prompt to steer small models toward the desired tone.",
+            "personality_examples": "Example Q&A used as style guidance. Pre-filled from the selected personality; edit freely."
+          }
+        },
+        "entities": {
+          "title": "🏠 Entities & Domains",
+          "description": "Which entities and domains the assistant can see and control.",
+          "data": {
+            "enabled_domains": "Enabled Domains",
+            "max_entities_per_discovery": "Max Entities Per Discovery",
+            "respect_exposure": "Respect Entity Exposure"
+          },
+          "data_description": {
+            "enabled_domains": "Limit which domains the LLM can see and control.",
+            "max_entities_per_discovery": "Cap on entities returned per discovery call (20-500).",
+            "respect_exposure": "Only access entities exposed to this assistant (Home Assistant default)."
+          }
+        },
+        "aliases": {
+          "title": "🏷️ Entity Aliases",
+          "description": "Give entities friendly names the assistant understands.\n\nCurrent aliases:\n{current}",
+          "data": {
+            "entity_id": "Entity to alias",
+            "alias": "Alias",
+            "remove_alias": "Remove an alias"
+          },
+          "data_description": {
+            "entity_id": "Pick the entity you want to give an alias.",
+            "alias": "The friendly name (e.g. 'luz de mesita'). Leave entity and alias empty to only remove.",
+            "remove_alias": "Select an existing alias to delete it."
+          }
+        },
+        "templates": {
+          "title": "🧠 Context Templates",
+          "description": "Jinja2 templates rendered and injected as dynamic context.\n\nCurrent templates:\n{current}",
+          "data": {
+            "new_template": "Add a template (Jinja2)",
+            "remove_template": "Remove a template"
+          },
+          "data_description": {
+            "new_template": "One Jinja2 template, rendered and injected as dynamic context. Example: printing the current time with now().strftime.",
+            "remove_template": "Select an existing template to delete it."
+          }
+        },
+        "behaviour": {
+          "title": "🎛️ Control & Behaviour",
+          "description": "Home Assistant control, confirmation and tool exposure.",
+          "data": {
+            "control_home_assistant": "Control Home Assistant",
+            "llm_hass_api": "Home Assistant LLM API",
+            "confirmation_required": "Require Confirmation",
+            "expose_scripts": "Expose Scripts",
+            "expose_scenes": "Expose Scenes",
+            "max_iterations": "Max Tool Iterations"
+          },
+          "data_description": {
+            "control_home_assistant": "Allow the LLM to call Home Assistant tools to control devices.",
+            "llm_hass_api": "Which Home Assistant LLM API exposes tools to this agent.",
+            "confirmation_required": "Ask the user to confirm before performing any control action (turning devices on/off, running scripts, activating scenes).",
+            "expose_scripts": "Give the LLM a 'run_script' tool to run Home Assistant scripts by entity_id.",
+            "expose_scenes": "Give the LLM an 'activate_scene' tool to activate Home Assistant scenes by entity_id.",
+            "max_iterations": "Maximum number of tool-call loops per response."
+          }
+        },
+        "web_search": {
+          "title": "🌐 Web Search",
+          "description": "Self-hosted web search via SearXNG.",
+          "data": {
+            "enable_web_search": "Enable Web Search (SearXNG)",
+            "searxng_url": "SearXNG URL",
+            "searxng_engines": "SearXNG Engines",
+            "searxng_max_results": "SearXNG Max Results"
+          },
+          "data_description": {
+            "enable_web_search": "Allow the LLM to search the web using your local SearXNG instance (fully self-hosted, no external API).",
+            "searxng_url": "Base URL of your SearXNG instance (e.g. http://10.0.98.x:8080). JSON format must be enabled in its settings.yml.",
+            "searxng_engines": "Optional comma-separated engines to restrict the search (e.g. google,duckduckgo). Leave empty for all.",
+            "searxng_max_results": "Maximum number of search results returned to the LLM (1-20)."
+          }
+        },
+        "rag": {
+          "title": "📚 RAG",
+          "description": "Retrieval-augmented context from the local index.",
+          "data": {
+            "enable_rag": "Enable RAG",
+            "rag_top_k": "RAG Top K"
+          },
+          "data_description": {
+            "enable_rag": "Retrieve relevant home context from the local RAG index to answer questions.",
+            "rag_top_k": "Number of context chunks retrieved for RAG."
+          }
+        },
+        "follow_up": {
+          "title": "💬 Follow-up",
+          "description": "Follow-up and end-of-conversation phrases.",
+          "data": {
+            "follow_up_phrases": "Follow-up Phrases",
+            "end_words": "End Conversation Words"
+          },
+          "data_description": {
+            "follow_up_phrases": "Comma-separated phrases the LLM may use to keep the conversation going.",
+            "end_words": "Comma-separated words the user can say to end the conversation."
+          }
+        },
+        "advanced": {
+          "title": "⚙️ Advanced",
+          "description": "Debug, timeouts and retries.",
+          "data": {
+            "debug_mode": "Debug Mode",
+            "request_timeout": "Request Timeout (seconds)",
+            "connect_timeout": "Connect Timeout (seconds)",
+            "first_delta_timeout": "First Delta Timeout (seconds)",
+            "max_retries": "Max Retries",
+            "retry_backoff": "Retry Backoff (seconds)"
+          },
+          "data_description": {
+            "debug_mode": "Log detailed prompts and tool calls to the Home Assistant log.",
+            "request_timeout": "Overall HTTP request timeout.",
+            "connect_timeout": "TCP connect timeout.",
+            "first_delta_timeout": "Max wait for the first streamed token (falls back to non-streaming if exceeded).",
+            "max_retries": "Retry attempts on connection failure.",
+            "retry_backoff": "Base backoff seconds between retries (exponential)."
           }
         }
       }
@@ -219,52 +257,67 @@
       },
       "entry_type": "AI task",
       "step": {
-        "set_options": {
-          "title": "Lemonade AI Task",
-          "description": "Configure model and structured-output options for AI Task generation.",
-          "sections": {
-            "profile": {
-              "name": "👤 Profile & Model",
-              "description": "Name, model and generation parameters.",
-              "data": {
-                "name": "Name",
-                "model_name": "Model",
-                "system_prompt": "System Prompt",
-                "temperature": "Temperature (creativity)",
-                "max_tokens": "Max Response Tokens"
-              },
-              "data_description": {
-                "name": "Display name for this AI task (shown in the subentry list).",
-                "model_name": "LLM model loaded on the Lemonade server.",
-                "system_prompt": "Base instructions for AI Task generation.",
-                "temperature": "0 = deterministic, 2 = very creative.",
-                "max_tokens": "Maximum length of the generated response."
-              }
-            },
-            "structured": {
-              "name": "🧩 Structured output",
-              "description": "How to extract structured data from the model when the task requests a schema.",
-              "data": {
-                "ai_task_extraction_method": "Extraction method",
-                "ai_task_retries": "Retry count",
-                "ai_task_enable_vision": "Enable vision / attachments"
-              },
-              "data_description": {
-                "ai_task_extraction_method": "None = raw text. Structured output = ask for JSON matching the schema. Tool call = model calls a submit_response function (more reliable with some models).",
-                "ai_task_retries": "Extra attempts if the model returns malformed or invalid data. The error is fed back so it can self-correct.",
-                "ai_task_enable_vision": "Advertise attachment support and pass images to the model. Only enable if the model is multimodal."
-              }
-            },
-            "advanced": {
-              "name": "⚙️ Advanced",
-              "description": "Request timeouts.",
-              "data": {
-                "request_timeout": "Request Timeout (seconds)"
-              },
-              "data_description": {
-                "request_timeout": "Overall HTTP request timeout."
-              }
-            }
+        "user": {
+          "title": "New AI task",
+          "description": "Create the AI task with the essentials. Everything else uses sensible defaults and can be adjusted later via Reconfigure.",
+          "data": {
+            "name": "Name",
+            "model_name": "Model"
+          },
+          "data_description": {
+            "name": "Display name for this AI task (shown in the subentry list).",
+            "model_name": "LLM model loaded on the Lemonade server."
+          }
+        },
+        "menu": {
+          "title": "Reconfigure AI task",
+          "description": "Pick a section to edit. Each section saves and returns here.",
+          "menu_options": {
+            "profile": "👤 Profile & Model",
+            "structured": "🧩 Structured output",
+            "advanced": "⚙️ Advanced"
+          }
+        },
+        "profile": {
+          "title": "👤 Profile & Model",
+          "description": "Name, model and generation parameters.",
+          "data": {
+            "name": "Name",
+            "model_name": "Model",
+            "system_prompt": "System Prompt",
+            "temperature": "Temperature (creativity)",
+            "max_tokens": "Max Response Tokens"
+          },
+          "data_description": {
+            "name": "Display name for this AI task (shown in the subentry list).",
+            "model_name": "LLM model loaded on the Lemonade server.",
+            "system_prompt": "Base instructions for AI Task generation.",
+            "temperature": "0 = deterministic, 2 = very creative.",
+            "max_tokens": "Maximum length of the generated response."
+          }
+        },
+        "structured": {
+          "title": "🧩 Structured output",
+          "description": "How to extract structured data from the model when the task requests a schema.",
+          "data": {
+            "ai_task_extraction_method": "Extraction method",
+            "ai_task_retries": "Retry count",
+            "ai_task_enable_vision": "Enable vision / attachments"
+          },
+          "data_description": {
+            "ai_task_extraction_method": "None = raw text. Structured output = ask for JSON matching the schema. Tool call = model calls a submit_response function (more reliable with some models).",
+            "ai_task_retries": "Extra attempts if the model returns malformed or invalid data. The error is fed back so it can self-correct.",
+            "ai_task_enable_vision": "Advertise attachment support and pass images to the model. Only enable if the model is multimodal."
+          }
+        },
+        "advanced": {
+          "title": "⚙️ Advanced",
+          "description": "Request timeouts.",
+          "data": {
+            "request_timeout": "Request Timeout (seconds)"
+          },
+          "data_description": {
+            "request_timeout": "Overall HTTP request timeout."
           }
         }
       }

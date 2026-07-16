@@ -405,348 +405,534 @@ class LemonadeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return []
 
 
+def _as_bool(val: Any, default: bool = False) -> bool:
+    """Coerce a stored value into a real bool for checkbox defaults."""
+    if val is None:
+        return default
+    if isinstance(val, str):
+        return val in ("1", "true", "yes", "on", "True")
+    return bool(val)
+
+
 class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
-    """Handle subentry flow for Lemonade."""
+    """Handle subentry flow for Lemonade.
+
+    Creation (source == "user") uses a single minimal step (name + model,
+    plus personality for conversation agents); everything else is seeded with
+    defaults. Reconfiguration presents a menu: each settings section is its
+    own sub-step that saves and returns to the menu. Entity aliases and
+    context templates are managed via dedicated add/remove sub-steps.
+    """
 
     @property
     def _is_new(self) -> bool:
         """Return if this is a new subentry."""
         return self.source == "user"
 
+    # ------------------------------------------------------------------
+    # Creation (minimal, linear)
+    # ------------------------------------------------------------------
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """User flow to create a subentry."""
-        return await self.async_step_set_options(user_input)
-
-    async def async_step_reconfigure(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle reconfiguration."""
-        return await self.async_step_set_options(user_input)
-
-    async def async_step_set_options(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Set subentry options."""
+        """Create a new subentry with the essentials; the rest uses defaults."""
         entry = self._get_entry()
-        if entry.state is not config_entries.ConfigEntryState.LOADED:
-            return self.async_abort(reason="entry_not_loaded")
-
-        # Personalities (built-in + shipped + user override) — needed both for
-        # rendering defaults and for normalizing the saved prompt per-personality.
-        personalities = await build_personalities(self.hass)
+        is_ai = self._subentry_type == "ai_task"
 
         if user_input is not None:
-            # Sections nest their fields; flatten back into a single dict so
-            # storage stays flat (backward compatible with conversation.py).
             flat: dict[str, Any] = {}
             for value in user_input.values():
                 if isinstance(value, dict):
                     flat.update(value)
-            user_input = flat or user_input
+            flat = flat or user_input
 
-            # Normalize boolean fields from string "1"/"0" to proper bools
-            for key in (
-                CONF_ENABLE_RAG,
-                CONF_CONTROL_HA,
-                CONF_DEBUG_MODE,
-                CONF_CLEAN_RESPONSES,
-                CONF_ENABLE_STREAMING,
-                CONF_RESPECT_EXPOSURE,
-                CONF_ENABLE_WEB_SEARCH,
-                CONF_CONFIRMATION_REQUIRED,
-                CONF_EXPOSE_SCRIPTS,
-                CONF_EXPOSE_SCENES,
-                CONF_AI_TASK_ENABLE_VISION,
-                CONF_INCLUDE_EXAMPLES,
-            ):
-                if key in user_input:
-                    user_input[key] = user_input[key] in ("1", True, "true")
-
-            if CONF_AI_TASK_RETRIES in user_input:
-                try:
-                    user_input[CONF_AI_TASK_RETRIES] = int(
-                        user_input[CONF_AI_TASK_RETRIES]
-                    )
-                except (ValueError, TypeError):
-                    user_input[CONF_AI_TASK_RETRIES] = DEFAULT_AI_TASK_RETRIES
-
-            # Normalize context_templates: text -> list (one template per line)
-            if CONF_CONTEXT_TEMPLATES in user_input:
-                user_input[CONF_CONTEXT_TEMPLATES] = [
-                    line.strip()
-                    for line in user_input[CONF_CONTEXT_TEMPLATES].splitlines()
-                    if line.strip()
-                ]
-
-            # Normalize personality prompt: store it per-personality. Config
-            # flow cannot refresh the prompt textbox live when the persona
-            # dropdown changes, so on submit the box may still hold the
-            # previously-shown text. To avoid leaking that stale text across
-            # personas, we reset the target persona's override whenever the
-            # persona actually changed, and only persist an edit when the
-            # persona is unchanged and the text differs from its built-in.
-            if CONF_PERSONALITY_PROMPT in user_input:
-                old_data = (
-                    {} if self._is_new else self._get_reconfigure_subentry().data
-                )
-                old_personality = old_data.get(CONF_PERSONALITY, DEFAULT_PERSONALITY)
-                new_personality = user_input.get(CONF_PERSONALITY, DEFAULT_PERSONALITY)
-                sub_prompt = user_input.pop(CONF_PERSONALITY_PROMPT)
-                prompts = dict(user_input.get(CONF_PERSONALITY_PROMPTS, {}) or {})
-                if new_personality != old_personality:
-                    # Persona switched: discard the stale box content and
-                    # reset the target persona to its built-in prompt.
-                    prompts.pop(new_personality, None)
-                else:
-                    builtin = (personalities.get(new_personality, {}) or {}).get(
-                        "prompt", ""
-                    )
-                    if sub_prompt and sub_prompt != builtin:
-                        prompts[new_personality] = sub_prompt
-                    else:
-                        prompts.pop(new_personality, None)
-                user_input[CONF_PERSONALITY_PROMPTS] = prompts
-
-            # Normalize entity_aliases: "entity_id: alias" lines -> dict
-            if CONF_ENTITY_ALIASES in user_input:
-                aliases: dict[str, str] = {}
-                for line in user_input[CONF_ENTITY_ALIASES].splitlines():
-                    line = line.strip()
-                    if not line or ":" not in line:
-                        continue
-                    ent, alias = line.split(":", 1)
-                    ent = ent.strip()
-                    alias = alias.strip()
-                    if ent and alias:
-                        aliases[ent] = alias
-                user_input[CONF_ENTITY_ALIASES] = aliases
-
-            # Normalize numeric fields
-            if CONF_MAX_ENTITIES_PER_DISCOVERY in user_input:
-                try:
-                    user_input[CONF_MAX_ENTITIES_PER_DISCOVERY] = int(
-                        user_input[CONF_MAX_ENTITIES_PER_DISCOVERY]
-                    )
-                except (ValueError, TypeError):
-                    user_input[CONF_MAX_ENTITIES_PER_DISCOVERY] = (
-                        DEFAULT_MAX_ENTITIES_PER_DISCOVERY
-                    )
-            if CONF_SEARXNG_MAX_RESULTS in user_input:
-                try:
-                    user_input[CONF_SEARXNG_MAX_RESULTS] = int(
-                        user_input[CONF_SEARXNG_MAX_RESULTS]
-                    )
-                except (ValueError, TypeError):
-                    user_input[CONF_SEARXNG_MAX_RESULTS] = (
-                        DEFAULT_SEARXNG_MAX_RESULTS
-                    )
-            title = user_input.pop(CONF_NAME, "").strip() or (
-                f"Lemonade ({user_input.get(CONF_MODEL_NAME, 'Lemonade')})"
+            model = flat.get(CONF_MODEL_NAME)
+            name = (flat.get(CONF_NAME) or "").strip()
+            defaults = (
+                DEFAULT_AI_TASK_DATA if is_ai else DEFAULT_CONVERSATION_DATA
+            ).copy()
+            data = {**defaults, CONF_MODEL_NAME: model}
+            if not is_ai and flat.get(CONF_PERSONALITY):
+                data[CONF_PERSONALITY] = flat[CONF_PERSONALITY]
+            title = name or (
+                f"Lemonade AI Task ({model})"
+                if is_ai
+                else f"Lemonade Assistant ({model})"
             )
-            if self._is_new:
-                return self.async_create_entry(
-                    title=title,
-                    data=user_input,
-                )
-            return self.async_update_and_abort(
-                entry,
-                self._get_reconfigure_subentry(),
-                data=user_input,
-                title=title,
-            )
+            return self.async_create_entry(title=title, data=data)
 
-        # Get current options
-        if self._is_new:
-            options = DEFAULT_CONVERSATION_DATA.copy()
-            if self._subentry_type == "ai_task":
-                options = DEFAULT_AI_TASK_DATA.copy()
-        else:
-            options = self._get_reconfigure_subentry().data.copy()
-
-        # Fetch models
         models = await self._fetch_models(entry)
         model_options = models or ["No models found"]
+        default_name = "AI Task" if is_ai else "Conversation Agent"
 
-        # Fetch available LLM APIs for HA control
-        llm_apis = llm.async_get_apis(self.hass)
-        llm_api_options = [{"value": api.id, "label": api.name} for api in llm_apis]
-        if not llm_api_options:
-            llm_api_options = [{"value": "none", "label": "No LLM APIs available"}]
-
-        # Helper returning an actual bool for BooleanSelector (checkbox) defaults
-        def _bool(key: str, default: bool = False) -> bool:
-            val = options.get(key, default)
-            if isinstance(val, str):
-                return val in ("1", "true", "yes", "on", "True")
-            return bool(val)
-
-        # Default display name shown/edited by the user
-        if self._is_new:
-            default_name = (
-                "AI Task" if self._subentry_type == "ai_task" else "Conversation Agent"
+        fields: dict[Any, Any] = {
+            vol.Required(CONF_NAME, default=default_name): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.TEXT)
+            ),
+            vol.Required(CONF_MODEL_NAME): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(value=m, label=m) for m in model_options
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                    sort=True,
+                )
+            ),
+        }
+        if not is_ai:
+            personalities = await build_personalities(self.hass)
+            fields[
+                vol.Optional(CONF_PERSONALITY, default=DEFAULT_PERSONALITY)
+            ] = SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(value=k, label=v["name"])
+                        for k, v in personalities.items()
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                    sort=True,
+                )
             )
-        else:
-            default_name = self._get_reconfigure_subentry().title
 
-        # ── AI Task: dedicated reduced schema ───────────────────
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(fields),
+        )
+
+    # ------------------------------------------------------------------
+    # Reconfigure: menu
+    # ------------------------------------------------------------------
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Entry point for reconfiguration -> show the section menu."""
+        return await self.async_step_menu()
+
+    async def async_step_menu(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Show a menu of configuration sections."""
+        entry = self._get_entry()
+        if entry.state is not config_entries.ConfigEntryState.LOADED:
+            return self.async_abort(reason="entry_not_loaded")
+
         if self._subentry_type == "ai_task":
-            return self.async_show_form(
-                step_id="set_options",
-                data_schema=vol.Schema(
-                    {
-                        vol.Required("profile"): section(
-                            vol.Schema(
-                                {
-                                    vol.Required(
-                                        CONF_NAME, default=default_name
-                                    ): TextSelector(
-                                        TextSelectorConfig(
-                                            type=TextSelectorType.TEXT
-                                        )
-                                    ),
-                                    vol.Required(
-                                        CONF_MODEL_NAME,
-                                        default=options.get(CONF_MODEL_NAME),
-                                    ): SelectSelector(
-                                        SelectSelectorConfig(
-                                            options=[
-                                                SelectOptionDict(value=m, label=m)
-                                                for m in model_options
-                                            ],
-                                            mode=SelectSelectorMode.DROPDOWN,
-                                            sort=True,
-                                        )
-                                    ),
-                                    vol.Optional(
-                                        CONF_SYSTEM_PROMPT,
-                                        default=options.get(
-                                            CONF_SYSTEM_PROMPT,
-                                            DEFAULT_AI_TASK_SYSTEM_PROMPT,
-                                        ),
-                                    ): TextSelector(
-                                        TextSelectorConfig(
-                                            type=TextSelectorType.TEXT,
-                                            multiline=True,
-                                        )
-                                    ),
-                                    vol.Optional(
-                                        CONF_TEMPERATURE,
-                                        default=options.get(
-                                            CONF_TEMPERATURE, DEFAULT_TEMPERATURE
-                                        ),
-                                    ): NumberSelector(
-                                        NumberSelectorConfig(
-                                            min=MIN_TEMPERATURE,
-                                            max=MAX_TEMPERATURE,
-                                            step=0.1,
-                                            mode=NumberSelectorMode.SLIDER,
-                                        )
-                                    ),
-                                    vol.Optional(
-                                        CONF_MAX_TOKENS,
-                                        default=options.get(
-                                            CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS
-                                        ),
-                                    ): NumberSelector(
-                                        NumberSelectorConfig(
-                                            min=MIN_MAX_TOKENS,
-                                            max=MAX_MAX_TOKENS,
-                                            step=256,
-                                            mode=NumberSelectorMode.BOX,
-                                        )
-                                    ),
-                                }
-                            ),
-                            {"collapsed": False},
-                        ),
-                        # ── 🧩 Structured output ────────────────────
-                        vol.Required("structured"): section(
-                            vol.Schema(
-                                {
-                                    vol.Optional(
-                                        CONF_AI_TASK_EXTRACTION_METHOD,
-                                        default=options.get(
-                                            CONF_AI_TASK_EXTRACTION_METHOD,
-                                            DEFAULT_AI_TASK_EXTRACTION_METHOD,
-                                        ),
-                                    ): SelectSelector(
-                                        SelectSelectorConfig(
-                                            options=[
-                                                SelectOptionDict(
-                                                    value=AI_TASK_EXTRACTION_NONE,
-                                                    label="None (raw text)",
-                                                ),
-                                                SelectOptionDict(
-                                                    value=AI_TASK_EXTRACTION_STRUCTURE,
-                                                    label="Structured output (JSON)",
-                                                ),
-                                                SelectOptionDict(
-                                                    value=AI_TASK_EXTRACTION_TOOL,
-                                                    label="Tool call",
-                                                ),
-                                            ],
-                                            mode=SelectSelectorMode.DROPDOWN,
-                                        )
-                                    ),
-                                    vol.Optional(
-                                        CONF_AI_TASK_RETRIES,
-                                        default=options.get(
-                                            CONF_AI_TASK_RETRIES,
-                                            DEFAULT_AI_TASK_RETRIES,
-                                        ),
-                                    ): NumberSelector(
-                                        NumberSelectorConfig(
-                                            min=MIN_AI_TASK_RETRIES,
-                                            max=MAX_AI_TASK_RETRIES,
-                                            step=1,
-                                            mode=NumberSelectorMode.BOX,
-                                        )
-                                    ),
-                                    vol.Optional(
-                                        CONF_AI_TASK_ENABLE_VISION,
-                                        default=_bool(
-                                            CONF_AI_TASK_ENABLE_VISION, False
-                                        ),
-                                    ): BooleanSelector(),
-                                }
-                            ),
-                            {"collapsed": False},
-                        ),
-                        # ── ⚙️ Advanced ─────────────────────────────
-                        vol.Required("advanced"): section(
-                            vol.Schema(
-                                {
-                                    vol.Optional(
-                                        CONF_REQUEST_TIMEOUT,
-                                        default=options.get(
-                                            CONF_REQUEST_TIMEOUT,
-                                            DEFAULT_REQUEST_TIMEOUT,
-                                        ),
-                                    ): NumberSelector(
-                                        NumberSelectorConfig(
-                                            min=MIN_REQUEST_TIMEOUT,
-                                            max=MAX_REQUEST_TIMEOUT,
-                                            step=5,
-                                            mode=NumberSelectorMode.BOX,
-                                        )
-                                    ),
-                                }
-                            ),
-                            {"collapsed": True},
-                        ),
-                    }
-                ),
+            menu_options = ["profile", "structured", "advanced"]
+        else:
+            menu_options = [
+                "profile",
+                "personalidad",
+                "entities",
+                "aliases",
+                "templates",
+                "behaviour",
+                "web_search",
+                "rag",
+                "follow_up",
+                "advanced",
+            ]
+        return self.async_show_menu(step_id="menu", menu_options=menu_options)
+
+    # ------------------------------------------------------------------
+    # Section step wrappers
+    # ------------------------------------------------------------------
+    async def async_step_profile(self, user_input=None) -> FlowResult:
+        return await self._section_step("profile", user_input)
+
+    async def async_step_personalidad(self, user_input=None) -> FlowResult:
+        return await self._section_step("personalidad", user_input)
+
+    async def async_step_entities(self, user_input=None) -> FlowResult:
+        return await self._section_step("entities", user_input)
+
+    async def async_step_behaviour(self, user_input=None) -> FlowResult:
+        return await self._section_step("behaviour", user_input)
+
+    async def async_step_web_search(self, user_input=None) -> FlowResult:
+        return await self._section_step("web_search", user_input)
+
+    async def async_step_rag(self, user_input=None) -> FlowResult:
+        return await self._section_step("rag", user_input)
+
+    async def async_step_follow_up(self, user_input=None) -> FlowResult:
+        return await self._section_step("follow_up", user_input)
+
+    async def async_step_advanced(self, user_input=None) -> FlowResult:
+        return await self._section_step("advanced", user_input)
+
+    async def async_step_structured(self, user_input=None) -> FlowResult:
+        return await self._section_step("structured", user_input)
+
+    # ------------------------------------------------------------------
+    # Generic section handler
+    # ------------------------------------------------------------------
+    async def _section_step(
+        self, section_id: str, user_input: dict[str, Any] | None
+    ) -> FlowResult:
+        """Render or save a single settings section, returning to the menu."""
+        entry = self._get_entry()
+        if entry.state is not config_entries.ConfigEntryState.LOADED:
+            return self.async_abort(reason="entry_not_loaded")
+
+        subentry = self._get_reconfigure_subentry()
+        options = dict(subentry.data)
+        personalities = await build_personalities(self.hass)
+
+        if user_input is not None:
+            flat: dict[str, Any] = {}
+            for value in user_input.values():
+                if isinstance(value, dict):
+                    flat.update(value)
+            flat = flat or dict(user_input)
+
+            title = None
+            if CONF_NAME in flat:
+                title = flat.pop(CONF_NAME).strip() or subentry.title
+
+            normalized = self._normalize(flat, options, personalities)
+            options.update(normalized)
+            self._commit(options, title)
+            return await self.async_step_menu()
+
+        schema = await self._build_section_schema(
+            section_id, options, personalities, entry
+        )
+        return self.async_show_form(step_id=section_id, data_schema=schema)
+
+    def _commit(self, data: dict[str, Any], title: str | None = None) -> None:
+        """Persist the subentry data (and optional title) without aborting."""
+        entry = self._get_entry()
+        subentry = self._get_reconfigure_subentry()
+        kwargs: dict[str, Any] = {"data": data}
+        if title:
+            kwargs["title"] = title
+        self.hass.config_entries.async_update_subentry(entry, subentry, **kwargs)
+
+    def _normalize(
+        self,
+        user_input: dict[str, Any],
+        old_options: dict[str, Any],
+        personalities: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Coerce raw form values into stored types (partial-dict safe)."""
+        data = dict(user_input)
+
+        for key in (
+            CONF_ENABLE_RAG,
+            CONF_CONTROL_HA,
+            CONF_DEBUG_MODE,
+            CONF_CLEAN_RESPONSES,
+            CONF_ENABLE_STREAMING,
+            CONF_RESPECT_EXPOSURE,
+            CONF_ENABLE_WEB_SEARCH,
+            CONF_CONFIRMATION_REQUIRED,
+            CONF_EXPOSE_SCRIPTS,
+            CONF_EXPOSE_SCENES,
+            CONF_AI_TASK_ENABLE_VISION,
+            CONF_INCLUDE_EXAMPLES,
+        ):
+            if key in data:
+                data[key] = data[key] in ("1", True, "true")
+
+        if CONF_AI_TASK_RETRIES in data:
+            try:
+                data[CONF_AI_TASK_RETRIES] = int(data[CONF_AI_TASK_RETRIES])
+            except (ValueError, TypeError):
+                data[CONF_AI_TASK_RETRIES] = DEFAULT_AI_TASK_RETRIES
+
+        # Personality prompt: store per-personality. The form cannot refresh the
+        # prompt textbox live when the persona dropdown changes, so on submit the
+        # box may still hold the previously-shown text. Reset the target
+        # persona's override when the persona changed; only persist an edit when
+        # the persona is unchanged and the text differs from its built-in.
+        if CONF_PERSONALITY_PROMPT in data:
+            old_personality = old_options.get(CONF_PERSONALITY, DEFAULT_PERSONALITY)
+            new_personality = data.get(CONF_PERSONALITY, DEFAULT_PERSONALITY)
+            sub_prompt = data.pop(CONF_PERSONALITY_PROMPT)
+            prompts = dict(old_options.get(CONF_PERSONALITY_PROMPTS, {}) or {})
+            if new_personality != old_personality:
+                prompts.pop(new_personality, None)
+            else:
+                builtin = (personalities.get(new_personality, {}) or {}).get(
+                    "prompt", ""
+                )
+                if sub_prompt and sub_prompt != builtin:
+                    prompts[new_personality] = sub_prompt
+                else:
+                    prompts.pop(new_personality, None)
+            data[CONF_PERSONALITY_PROMPTS] = prompts
+
+        if CONF_MAX_ENTITIES_PER_DISCOVERY in data:
+            try:
+                data[CONF_MAX_ENTITIES_PER_DISCOVERY] = int(
+                    data[CONF_MAX_ENTITIES_PER_DISCOVERY]
+                )
+            except (ValueError, TypeError):
+                data[CONF_MAX_ENTITIES_PER_DISCOVERY] = (
+                    DEFAULT_MAX_ENTITIES_PER_DISCOVERY
+                )
+        if CONF_SEARXNG_MAX_RESULTS in data:
+            try:
+                data[CONF_SEARXNG_MAX_RESULTS] = int(data[CONF_SEARXNG_MAX_RESULTS])
+            except (ValueError, TypeError):
+                data[CONF_SEARXNG_MAX_RESULTS] = DEFAULT_SEARXNG_MAX_RESULTS
+
+        return data
+
+    # ------------------------------------------------------------------
+    # Aliases sub-step (add/remove entity aliases)
+    # ------------------------------------------------------------------
+    async def async_step_aliases(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage entity aliases (add one, or remove one), then return to menu."""
+        entry = self._get_entry()
+        if entry.state is not config_entries.ConfigEntryState.LOADED:
+            return self.async_abort(reason="entry_not_loaded")
+
+        subentry = self._get_reconfigure_subentry()
+        options = dict(subentry.data)
+        aliases: dict[str, str] = dict(
+            options.get(CONF_ENTITY_ALIASES, DEFAULT_ENTITY_ALIASES) or {}
+        )
+
+        if user_input is not None:
+            new_entity = (user_input.get("entity_id") or "").strip()
+            new_alias = (user_input.get("alias") or "").strip()
+            remove = user_input.get("remove_alias")
+
+            if new_entity and new_alias:
+                aliases[new_entity] = new_alias
+            if remove and remove in aliases:
+                del aliases[remove]
+
+            options[CONF_ENTITY_ALIASES] = aliases
+            self._commit(options)
+            return await self.async_step_menu()
+
+        fields: dict[Any, Any] = {
+            vol.Optional("entity_id"): EntitySelector(EntitySelectorConfig()),
+            vol.Optional("alias"): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.TEXT)
+            ),
+        }
+        if aliases:
+            remove_options = []
+            for ent, alias in aliases.items():
+                state = self.hass.states.get(ent)
+                original = (
+                    state.attributes.get("friendly_name", ent) if state else ent
+                )
+                remove_options.append(
+                    SelectOptionDict(value=ent, label=f"{original} → '{alias}'")
+                )
+            fields[vol.Optional("remove_alias")] = SelectSelector(
+                SelectSelectorConfig(
+                    options=remove_options,
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
             )
 
-        # Build the Personality section schema (examples shown only when enabled)
+        current = "\n".join(f"• {k} → {v}" for k, v in aliases.items()) or "—"
+        return self.async_show_form(
+            step_id="aliases",
+            data_schema=vol.Schema(fields),
+            description_placeholders={"current": current},
+        )
+
+    # ------------------------------------------------------------------
+    # Templates sub-step (add/remove context templates)
+    # ------------------------------------------------------------------
+    async def async_step_templates(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage context (Jinja2) templates, then return to the menu."""
+        entry = self._get_entry()
+        if entry.state is not config_entries.ConfigEntryState.LOADED:
+            return self.async_abort(reason="entry_not_loaded")
+
+        subentry = self._get_reconfigure_subentry()
+        options = dict(subentry.data)
+        templates: list[str] = list(
+            options.get(CONF_CONTEXT_TEMPLATES, DEFAULT_CONTEXT_TEMPLATES) or []
+        )
+
+        if user_input is not None:
+            new_template = (user_input.get("new_template") or "").strip()
+            remove = user_input.get("remove_template")
+
+            if new_template and new_template not in templates:
+                templates.append(new_template)
+            if remove and remove in templates:
+                templates.remove(remove)
+
+            options[CONF_CONTEXT_TEMPLATES] = templates
+            self._commit(options)
+            return await self.async_step_menu()
+
+        fields: dict[Any, Any] = {
+            vol.Optional("new_template"): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+            ),
+        }
+        if templates:
+            remove_options = [
+                SelectOptionDict(
+                    value=t,
+                    label=(t if len(t) <= 60 else f"{t[:57]}..."),
+                )
+                for t in templates
+            ]
+            fields[vol.Optional("remove_template")] = SelectSelector(
+                SelectSelectorConfig(
+                    options=remove_options,
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            )
+
+        current = "\n".join(f"• {t}" for t in templates) or "—"
+        return self.async_show_form(
+            step_id="templates",
+            data_schema=vol.Schema(fields),
+            description_placeholders={"current": current},
+        )
+
+    # ------------------------------------------------------------------
+    # Section schema builders (flat, one form per section)
+    # ------------------------------------------------------------------
+    async def _build_section_schema(
+        self,
+        section_id: str,
+        options: dict[str, Any],
+        personalities: dict[str, Any],
+        entry: config_entries.ConfigEntry,
+    ) -> vol.Schema:
+        """Return the flat vol.Schema for a given section id."""
+        if section_id == "profile":
+            models = await self._fetch_models(entry)
+            model_options = models or ["No models found"]
+            if self._subentry_type == "ai_task":
+                return self._schema_ai_profile(options, model_options)
+            return self._schema_profile(options, model_options)
+        if section_id == "personalidad":
+            return self._schema_personalidad(options, personalities)
+        if section_id == "entities":
+            return self._schema_entities(options)
+        if section_id == "behaviour":
+            return self._schema_behaviour(options)
+        if section_id == "web_search":
+            return self._schema_web_search(options)
+        if section_id == "rag":
+            return self._schema_rag(options)
+        if section_id == "follow_up":
+            return self._schema_follow_up(options)
+        if section_id == "structured":
+            return self._schema_structured(options)
+        if section_id == "advanced":
+            if self._subentry_type == "ai_task":
+                return self._schema_ai_advanced(options)
+            return self._schema_advanced(options)
+        return vol.Schema({})
+
+    def _schema_profile(
+        self, options: dict[str, Any], model_options: list[str]
+    ) -> vol.Schema:
+        return vol.Schema(
+            {
+                vol.Required(
+                    CONF_NAME,
+                    default=self._get_reconfigure_subentry().title,
+                ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
+                vol.Required(
+                    CONF_MODEL_NAME, default=options.get(CONF_MODEL_NAME)
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value=m, label=m)
+                            for m in model_options
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                        sort=True,
+                    )
+                ),
+                vol.Optional(
+                    CONF_TECHNICAL_PROMPT,
+                    default=options.get(CONF_TECHNICAL_PROMPT, ""),
+                ): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+                ),
+                vol.Optional(
+                    CONF_TEMPERATURE,
+                    default=options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_TEMPERATURE,
+                        max=MAX_TEMPERATURE,
+                        step=0.1,
+                        mode=NumberSelectorMode.SLIDER,
+                    )
+                ),
+                vol.Optional(
+                    CONF_MAX_TOKENS,
+                    default=options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_MAX_TOKENS,
+                        max=MAX_MAX_TOKENS,
+                        step=256,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Optional(
+                    CONF_MAX_HISTORY,
+                    default=options.get(CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_MAX_HISTORY,
+                        max=MAX_MAX_HISTORY,
+                        step=1,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Optional(
+                    CONF_RESPONSE_MODE,
+                    default=options.get(CONF_RESPONSE_MODE, DEFAULT_RESPONSE_MODE),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(
+                                value="none", label="None (pass-through)"
+                            ),
+                            SelectOptionDict(value="default", label="Default"),
+                            SelectOptionDict(
+                                value="always", label="Always respond"
+                            ),
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(
+                    CONF_CLEAN_RESPONSES,
+                    default=_as_bool(
+                        options.get(CONF_CLEAN_RESPONSES), DEFAULT_CLEAN_RESPONSES
+                    ),
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_ENABLE_STREAMING,
+                    default=_as_bool(
+                        options.get(CONF_ENABLE_STREAMING),
+                        DEFAULT_ENABLE_STREAMING,
+                    ),
+                ): BooleanSelector(),
+            }
+        )
+
+    def _schema_personalidad(
+        self, options: dict[str, Any], personalities: dict[str, Any]
+    ) -> vol.Schema:
         _personality = options.get(CONF_PERSONALITY, DEFAULT_PERSONALITY)
-        persona_fields = {
-            vol.Optional(
-                CONF_PERSONALITY,
-                default=_personality,
-            ): SelectSelector(
+        fields: dict[Any, Any] = {
+            vol.Optional(CONF_PERSONALITY, default=_personality): SelectSelector(
                 SelectSelectorConfig(
                     options=[
                         SelectOptionDict(value=k, label=v["name"])
@@ -762,468 +948,399 @@ class LemonadeSubentryFlowHandler(config_entries.ConfigSubentryFlow):
                     options, personalities, _personality
                 ),
             ): TextSelector(
-                TextSelectorConfig(
-                    type=TextSelectorType.TEXT, multiline=True
-                )
+                TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
             ),
             vol.Optional(
                 CONF_SARCASM_ENTITY,
                 default=options.get(CONF_SARCASM_ENTITY, DEFAULT_SARCASM_ENTITY),
-            ): TextSelector(
-                TextSelectorConfig(type=TextSelectorType.TEXT)
-            ),
+            ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
             vol.Optional(
                 CONF_INCLUDE_EXAMPLES,
-                default=_bool(CONF_INCLUDE_EXAMPLES, DEFAULT_INCLUDE_EXAMPLES),
+                default=_as_bool(
+                    options.get(CONF_INCLUDE_EXAMPLES), DEFAULT_INCLUDE_EXAMPLES
+                ),
             ): BooleanSelector(),
         }
-        if _bool(CONF_INCLUDE_EXAMPLES, DEFAULT_INCLUDE_EXAMPLES):
-            persona_fields[
+        if _as_bool(
+            options.get(CONF_INCLUDE_EXAMPLES), DEFAULT_INCLUDE_EXAMPLES
+        ):
+            fields[
                 vol.Optional(
                     CONF_PERSONALITY_EXAMPLES,
                     default=personalities.get(_personality, {}).get("examples", ""),
                 )
             ] = TextSelector(
-                TextSelectorConfig(
-                    type=TextSelectorType.TEXT, multiline=True
-                )
+                TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
             )
+        return vol.Schema(fields)
 
-        return self.async_show_form(
-            step_id="set_options",
-            data_schema=vol.Schema(
-                {
-                    # ── 👤 Profile & Model ──────────────────────────
-                    vol.Required("profile"): section(
-                        vol.Schema(
-                            {
-                                vol.Required(
-                                    CONF_NAME, default=default_name
-                                ): TextSelector(
-                                    TextSelectorConfig(type=TextSelectorType.TEXT)
-                                ),
-                                vol.Required(
-                                    CONF_MODEL_NAME,
-                                    default=options.get(CONF_MODEL_NAME),
-                                ): SelectSelector(
-                                    SelectSelectorConfig(
-                                        options=[
-                                            SelectOptionDict(value=m, label=m)
-                                            for m in model_options
-                                        ],
-                                        mode=SelectSelectorMode.DROPDOWN,
-                                        sort=True,
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_TECHNICAL_PROMPT,
-                                    default=options.get(CONF_TECHNICAL_PROMPT, ""),
-                                ): TextSelector(
-                                    TextSelectorConfig(
-                                        type=TextSelectorType.TEXT, multiline=True
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_TEMPERATURE,
-                                    default=options.get(
-                                        CONF_TEMPERATURE, DEFAULT_TEMPERATURE
-                                    ),
-                                ): NumberSelector(
-                                    NumberSelectorConfig(
-                                        min=MIN_TEMPERATURE,
-                                        max=MAX_TEMPERATURE,
-                                        step=0.1,
-                                        mode=NumberSelectorMode.SLIDER,
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_MAX_TOKENS,
-                                    default=options.get(
-                                        CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS
-                                    ),
-                                ): NumberSelector(
-                                    NumberSelectorConfig(
-                                        min=MIN_MAX_TOKENS,
-                                        max=MAX_MAX_TOKENS,
-                                        step=256,
-                                        mode=NumberSelectorMode.BOX,
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_MAX_HISTORY,
-                                    default=options.get(
-                                        CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY
-                                    ),
-                                ): NumberSelector(
-                                    NumberSelectorConfig(
-                                        min=MIN_MAX_HISTORY,
-                                        max=MAX_MAX_HISTORY,
-                                        step=1,
-                                        mode=NumberSelectorMode.BOX,
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_RESPONSE_MODE,
-                                    default=options.get(
-                                        CONF_RESPONSE_MODE, DEFAULT_RESPONSE_MODE
-                                    ),
-                                ): SelectSelector(
-                                    SelectSelectorConfig(
-                                        options=[
-                                            SelectOptionDict(
-                                                value="none",
-                                                label="None (pass-through)",
-                                            ),
-                                            SelectOptionDict(
-                                                value="default", label="Default"
-                                            ),
-                                            SelectOptionDict(
-                                                value="always",
-                                                label="Always respond",
-                                            ),
-                                        ],
-                                        mode=SelectSelectorMode.DROPDOWN,
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_CLEAN_RESPONSES,
-                                    default=_bool(
-                                        CONF_CLEAN_RESPONSES,
-                                        DEFAULT_CLEAN_RESPONSES,
-                                    ),
-                                ): BooleanSelector(),
-                                vol.Optional(
-                                    CONF_ENABLE_STREAMING,
-                                    default=_bool(
-                                        CONF_ENABLE_STREAMING,
-                                        DEFAULT_ENABLE_STREAMING,
-                                    ),
-                                ): BooleanSelector(),
-                            }
-                        ),
-                        {"collapsed": False},
+    def _schema_entities(self, options: dict[str, Any]) -> vol.Schema:
+        return vol.Schema(
+            {
+                vol.Optional(
+                    CONF_ENABLED_DOMAINS,
+                    default=options.get(
+                        CONF_ENABLED_DOMAINS, DEFAULT_ENABLED_DOMAINS
                     ),
-                    # ── 🎭 Personalidad ──────────────────────────
-                    vol.Required("personalidad"): section(
-                        vol.Schema(persona_fields),
-                        {"collapsed": False},
+                ): cv.multi_select(SUPPORTED_DOMAINS),
+                vol.Optional(
+                    CONF_MAX_ENTITIES_PER_DISCOVERY,
+                    default=options.get(
+                        CONF_MAX_ENTITIES_PER_DISCOVERY,
+                        DEFAULT_MAX_ENTITIES_PER_DISCOVERY,
                     ),
-                    # ── 🧠 Context ──────────────────────────────────
-                    vol.Required("context"): section(
-                        vol.Schema(
-                            {
-                                vol.Optional(
-                                    CONF_CONTEXT_TEMPLATES,
-                                    default="\n".join(
-                                        options.get(
-                                            CONF_CONTEXT_TEMPLATES,
-                                            DEFAULT_CONTEXT_TEMPLATES,
-                                        )
-                                    ),
-                                ): TextSelector(
-                                    TextSelectorConfig(
-                                        type=TextSelectorType.TEXT, multiline=True
-                                    )
-                                ),
-                            }
-                        ),
-                        {"collapsed": True},
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_MAX_ENTITIES_PER_DISCOVERY,
+                        max=MAX_MAX_ENTITIES_PER_DISCOVERY,
+                        step=5,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Optional(
+                    CONF_RESPECT_EXPOSURE,
+                    default=_as_bool(
+                        options.get(CONF_RESPECT_EXPOSURE),
+                        DEFAULT_RESPECT_EXPOSURE,
                     ),
-                    # ── 🏠 Entities & Domains ───────────────────────
-                    vol.Required("entities"): section(
-                        vol.Schema(
-                            {
-                                vol.Optional(
-                                    CONF_ENABLED_DOMAINS,
-                                    default=options.get(
-                                        CONF_ENABLED_DOMAINS,
-                                        DEFAULT_ENABLED_DOMAINS,
-                                    ),
-                                ): cv.multi_select(SUPPORTED_DOMAINS),
-                                vol.Optional(
-                                    CONF_ENTITY_ALIASES,
-                                    default="\n".join(
-                                        f"{k}: {v}"
-                                        for k, v in options.get(
-                                            CONF_ENTITY_ALIASES,
-                                            DEFAULT_ENTITY_ALIASES,
-                                        ).items()
-                                    ),
-                                ): TextSelector(
-                                    TextSelectorConfig(
-                                        type=TextSelectorType.TEXT, multiline=True
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_MAX_ENTITIES_PER_DISCOVERY,
-                                    default=options.get(
-                                        CONF_MAX_ENTITIES_PER_DISCOVERY,
-                                        DEFAULT_MAX_ENTITIES_PER_DISCOVERY,
-                                    ),
-                                ): NumberSelector(
-                                    NumberSelectorConfig(
-                                        min=MIN_MAX_ENTITIES_PER_DISCOVERY,
-                                        max=MAX_MAX_ENTITIES_PER_DISCOVERY,
-                                        step=5,
-                                        mode=NumberSelectorMode.BOX,
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_RESPECT_EXPOSURE,
-                                    default=_bool(
-                                        CONF_RESPECT_EXPOSURE,
-                                        DEFAULT_RESPECT_EXPOSURE,
-                                    ),
-                                ): BooleanSelector(),
-                            }
-                        ),
-                        {"collapsed": True},
+                ): BooleanSelector(),
+            }
+        )
+
+    def _schema_behaviour(self, options: dict[str, Any]) -> vol.Schema:
+        llm_apis = llm.async_get_apis(self.hass)
+        llm_api_options = [
+            {"value": api.id, "label": api.name} for api in llm_apis
+        ]
+        if not llm_api_options:
+            llm_api_options = [
+                {"value": "none", "label": "No LLM APIs available"}
+            ]
+        return vol.Schema(
+            {
+                vol.Optional(
+                    CONF_CONTROL_HA,
+                    default=_as_bool(
+                        options.get(CONF_CONTROL_HA), DEFAULT_CONTROL_HA
                     ),
-                    # ── 🎛️ Control & Behaviour ─────────────────────
-                    vol.Required("behaviour"): section(
-                        vol.Schema(
-                            {
-                                vol.Optional(
-                                    CONF_CONTROL_HA,
-                                    default=_bool(
-                                        CONF_CONTROL_HA, DEFAULT_CONTROL_HA
-                                    ),
-                                ): BooleanSelector(),
-                                vol.Optional(
-                                    CONF_LLM_HASS_API,
-                                    default=options.get(CONF_LLM_HASS_API),
-                                ): SelectSelector(
-                                    SelectSelectorConfig(
-                                        options=llm_api_options,
-                                        mode=SelectSelectorMode.DROPDOWN,
-                                        translation_key="llm_hass_api",
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_CONFIRMATION_REQUIRED,
-                                    default=_bool(
-                                        CONF_CONFIRMATION_REQUIRED,
-                                        DEFAULT_CONFIRMATION_REQUIRED,
-                                    ),
-                                ): BooleanSelector(),
-                                vol.Optional(
-                                    CONF_EXPOSE_SCRIPTS,
-                                    default=_bool(
-                                        CONF_EXPOSE_SCRIPTS,
-                                        DEFAULT_EXPOSE_SCRIPTS,
-                                    ),
-                                ): BooleanSelector(),
-                                vol.Optional(
-                                    CONF_EXPOSE_SCENES,
-                                    default=_bool(
-                                        CONF_EXPOSE_SCENES,
-                                        DEFAULT_EXPOSE_SCENES,
-                                    ),
-                                ): BooleanSelector(),
-                                vol.Optional(
-                                    CONF_MAX_ITERATIONS,
-                                    default=options.get(
-                                        CONF_MAX_ITERATIONS,
-                                        DEFAULT_MAX_ITERATIONS,
-                                    ),
-                                ): NumberSelector(
-                                    NumberSelectorConfig(
-                                        min=MIN_MAX_ITERATIONS,
-                                        max=MAX_MAX_ITERATIONS,
-                                        step=1,
-                                        mode=NumberSelectorMode.BOX,
-                                    )
-                                ),
-                            }
-                        ),
-                        {"collapsed": True},
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_LLM_HASS_API,
+                    default=options.get(CONF_LLM_HASS_API),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=llm_api_options,
+                        mode=SelectSelectorMode.DROPDOWN,
+                        translation_key="llm_hass_api",
+                    )
+                ),
+                vol.Optional(
+                    CONF_CONFIRMATION_REQUIRED,
+                    default=_as_bool(
+                        options.get(CONF_CONFIRMATION_REQUIRED),
+                        DEFAULT_CONFIRMATION_REQUIRED,
                     ),
-                    # ── 🌐 Web Search (SearXNG) ─────────────────────
-                    vol.Required("web_search"): section(
-                        vol.Schema(
-                            {
-                                vol.Optional(
-                                    CONF_ENABLE_WEB_SEARCH,
-                                    default=_bool(
-                                        CONF_ENABLE_WEB_SEARCH,
-                                        DEFAULT_ENABLE_WEB_SEARCH,
-                                    ),
-                                ): BooleanSelector(),
-                                vol.Optional(
-                                    CONF_SEARXNG_URL,
-                                    default=options.get(
-                                        CONF_SEARXNG_URL, DEFAULT_SEARXNG_URL
-                                    ),
-                                ): TextSelector(
-                                    TextSelectorConfig(type=TextSelectorType.URL)
-                                ),
-                                vol.Optional(
-                                    CONF_SEARXNG_ENGINES,
-                                    default=options.get(
-                                        CONF_SEARXNG_ENGINES,
-                                        DEFAULT_SEARXNG_ENGINES,
-                                    ),
-                                ): TextSelector(
-                                    TextSelectorConfig(type=TextSelectorType.TEXT)
-                                ),
-                                vol.Optional(
-                                    CONF_SEARXNG_MAX_RESULTS,
-                                    default=options.get(
-                                        CONF_SEARXNG_MAX_RESULTS,
-                                        DEFAULT_SEARXNG_MAX_RESULTS,
-                                    ),
-                                ): NumberSelector(
-                                    NumberSelectorConfig(
-                                        min=MIN_SEARXNG_MAX_RESULTS,
-                                        max=MAX_SEARXNG_MAX_RESULTS,
-                                        step=1,
-                                        mode=NumberSelectorMode.BOX,
-                                    )
-                                ),
-                            }
-                        ),
-                        {"collapsed": True},
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_EXPOSE_SCRIPTS,
+                    default=_as_bool(
+                        options.get(CONF_EXPOSE_SCRIPTS), DEFAULT_EXPOSE_SCRIPTS
                     ),
-                    # ── 📚 RAG ──────────────────────────────────────
-                    vol.Required("rag"): section(
-                        vol.Schema(
-                            {
-                                vol.Optional(
-                                    CONF_ENABLE_RAG,
-                                    default=_bool(
-                                        CONF_ENABLE_RAG, DEFAULT_ENABLE_RAG
-                                    ),
-                                ): BooleanSelector(),
-                                vol.Optional(
-                                    CONF_RAG_TOP_K,
-                                    default=options.get(
-                                        CONF_RAG_TOP_K, DEFAULT_RAG_TOP_K
-                                    ),
-                                ): NumberSelector(
-                                    NumberSelectorConfig(
-                                        min=MIN_RAG_TOP_K,
-                                        max=MAX_RAG_TOP_K,
-                                        step=1,
-                                        mode=NumberSelectorMode.BOX,
-                                    )
-                                ),
-                            }
-                        ),
-                        {"collapsed": True},
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_EXPOSE_SCENES,
+                    default=_as_bool(
+                        options.get(CONF_EXPOSE_SCENES), DEFAULT_EXPOSE_SCENES
                     ),
-                    # ── 💬 Follow-up ────────────────────────────────
-                    vol.Required("follow_up"): section(
-                        vol.Schema(
-                            {
-                                vol.Optional(
-                                    CONF_FOLLOW_UP_PHRASES,
-                                    default=options.get(
-                                        CONF_FOLLOW_UP_PHRASES,
-                                        DEFAULT_FOLLOW_UP_PHRASES,
-                                    ),
-                                ): TextSelector(
-                                    TextSelectorConfig(
-                                        type=TextSelectorType.TEXT, multiline=True
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_END_WORDS,
-                                    default=options.get(
-                                        CONF_END_WORDS, DEFAULT_END_WORDS
-                                    ),
-                                ): TextSelector(
-                                    TextSelectorConfig(
-                                        type=TextSelectorType.TEXT, multiline=True
-                                    )
-                                ),
-                            }
-                        ),
-                        {"collapsed": True},
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_MAX_ITERATIONS,
+                    default=options.get(
+                        CONF_MAX_ITERATIONS, DEFAULT_MAX_ITERATIONS
                     ),
-                    # ── ⚙️ Advanced ─────────────────────────────────
-                    vol.Required("advanced"): section(
-                        vol.Schema(
-                            {
-                                vol.Optional(
-                                    CONF_DEBUG_MODE,
-                                    default=_bool(
-                                        CONF_DEBUG_MODE, DEFAULT_DEBUG_MODE
-                                    ),
-                                ): BooleanSelector(),
-                                vol.Optional(
-                                    CONF_REQUEST_TIMEOUT,
-                                    default=options.get(
-                                        CONF_REQUEST_TIMEOUT,
-                                        DEFAULT_REQUEST_TIMEOUT,
-                                    ),
-                                ): NumberSelector(
-                                    NumberSelectorConfig(
-                                        min=MIN_REQUEST_TIMEOUT,
-                                        max=MAX_REQUEST_TIMEOUT,
-                                        step=5,
-                                        mode=NumberSelectorMode.BOX,
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_CONNECT_TIMEOUT,
-                                    default=options.get(
-                                        CONF_CONNECT_TIMEOUT,
-                                        DEFAULT_CONNECT_TIMEOUT,
-                                    ),
-                                ): NumberSelector(
-                                    NumberSelectorConfig(
-                                        min=MIN_CONNECT_TIMEOUT,
-                                        max=MAX_CONNECT_TIMEOUT,
-                                        step=1,
-                                        mode=NumberSelectorMode.BOX,
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_FIRST_DELTA_TIMEOUT,
-                                    default=options.get(
-                                        CONF_FIRST_DELTA_TIMEOUT,
-                                        DEFAULT_FIRST_DELTA_TIMEOUT,
-                                    ),
-                                ): NumberSelector(
-                                    NumberSelectorConfig(
-                                        min=MIN_FIRST_DELTA_TIMEOUT,
-                                        max=MAX_FIRST_DELTA_TIMEOUT,
-                                        step=1,
-                                        mode=NumberSelectorMode.BOX,
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_MAX_RETRIES,
-                                    default=options.get(
-                                        CONF_MAX_RETRIES, DEFAULT_MAX_RETRIES
-                                    ),
-                                ): NumberSelector(
-                                    NumberSelectorConfig(
-                                        min=MIN_MAX_RETRIES,
-                                        max=MAX_MAX_RETRIES,
-                                        step=1,
-                                        mode=NumberSelectorMode.BOX,
-                                    )
-                                ),
-                                vol.Optional(
-                                    CONF_RETRY_BACKOFF,
-                                    default=options.get(
-                                        CONF_RETRY_BACKOFF, DEFAULT_RETRY_BACKOFF
-                                    ),
-                                ): NumberSelector(
-                                    NumberSelectorConfig(
-                                        min=MIN_RETRY_BACKOFF,
-                                        max=MAX_RETRY_BACKOFF,
-                                        step=0.5,
-                                        mode=NumberSelectorMode.BOX,
-                                    )
-                                ),
-                            }
-                        ),
-                        {"collapsed": True},
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_MAX_ITERATIONS,
+                        max=MAX_MAX_ITERATIONS,
+                        step=1,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+            }
+        )
+
+    def _schema_web_search(self, options: dict[str, Any]) -> vol.Schema:
+        return vol.Schema(
+            {
+                vol.Optional(
+                    CONF_ENABLE_WEB_SEARCH,
+                    default=_as_bool(
+                        options.get(CONF_ENABLE_WEB_SEARCH),
+                        DEFAULT_ENABLE_WEB_SEARCH,
                     ),
-                }
-            ),
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_SEARXNG_URL,
+                    default=options.get(CONF_SEARXNG_URL, DEFAULT_SEARXNG_URL),
+                ): TextSelector(TextSelectorConfig(type=TextSelectorType.URL)),
+                vol.Optional(
+                    CONF_SEARXNG_ENGINES,
+                    default=options.get(
+                        CONF_SEARXNG_ENGINES, DEFAULT_SEARXNG_ENGINES
+                    ),
+                ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
+                vol.Optional(
+                    CONF_SEARXNG_MAX_RESULTS,
+                    default=options.get(
+                        CONF_SEARXNG_MAX_RESULTS, DEFAULT_SEARXNG_MAX_RESULTS
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_SEARXNG_MAX_RESULTS,
+                        max=MAX_SEARXNG_MAX_RESULTS,
+                        step=1,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+            }
+        )
+
+    def _schema_rag(self, options: dict[str, Any]) -> vol.Schema:
+        return vol.Schema(
+            {
+                vol.Optional(
+                    CONF_ENABLE_RAG,
+                    default=_as_bool(
+                        options.get(CONF_ENABLE_RAG), DEFAULT_ENABLE_RAG
+                    ),
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_RAG_TOP_K,
+                    default=options.get(CONF_RAG_TOP_K, DEFAULT_RAG_TOP_K),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_RAG_TOP_K,
+                        max=MAX_RAG_TOP_K,
+                        step=1,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+            }
+        )
+
+    def _schema_follow_up(self, options: dict[str, Any]) -> vol.Schema:
+        return vol.Schema(
+            {
+                vol.Optional(
+                    CONF_FOLLOW_UP_PHRASES,
+                    default=options.get(
+                        CONF_FOLLOW_UP_PHRASES, DEFAULT_FOLLOW_UP_PHRASES
+                    ),
+                ): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+                ),
+                vol.Optional(
+                    CONF_END_WORDS,
+                    default=options.get(CONF_END_WORDS, DEFAULT_END_WORDS),
+                ): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+                ),
+            }
+        )
+
+    def _schema_advanced(self, options: dict[str, Any]) -> vol.Schema:
+        return vol.Schema(
+            {
+                vol.Optional(
+                    CONF_DEBUG_MODE,
+                    default=_as_bool(
+                        options.get(CONF_DEBUG_MODE), DEFAULT_DEBUG_MODE
+                    ),
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_REQUEST_TIMEOUT,
+                    default=options.get(
+                        CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_REQUEST_TIMEOUT,
+                        max=MAX_REQUEST_TIMEOUT,
+                        step=5,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Optional(
+                    CONF_CONNECT_TIMEOUT,
+                    default=options.get(
+                        CONF_CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_CONNECT_TIMEOUT,
+                        max=MAX_CONNECT_TIMEOUT,
+                        step=1,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Optional(
+                    CONF_FIRST_DELTA_TIMEOUT,
+                    default=options.get(
+                        CONF_FIRST_DELTA_TIMEOUT, DEFAULT_FIRST_DELTA_TIMEOUT
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_FIRST_DELTA_TIMEOUT,
+                        max=MAX_FIRST_DELTA_TIMEOUT,
+                        step=1,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Optional(
+                    CONF_MAX_RETRIES,
+                    default=options.get(CONF_MAX_RETRIES, DEFAULT_MAX_RETRIES),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_MAX_RETRIES,
+                        max=MAX_MAX_RETRIES,
+                        step=1,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Optional(
+                    CONF_RETRY_BACKOFF,
+                    default=options.get(CONF_RETRY_BACKOFF, DEFAULT_RETRY_BACKOFF),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_RETRY_BACKOFF,
+                        max=MAX_RETRY_BACKOFF,
+                        step=0.5,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+            }
+        )
+
+    # ---- AI Task section schemas ----
+    def _schema_ai_profile(
+        self, options: dict[str, Any], model_options: list[str]
+    ) -> vol.Schema:
+        return vol.Schema(
+            {
+                vol.Required(
+                    CONF_NAME, default=self._get_reconfigure_subentry().title
+                ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
+                vol.Required(
+                    CONF_MODEL_NAME, default=options.get(CONF_MODEL_NAME)
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value=m, label=m)
+                            for m in model_options
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                        sort=True,
+                    )
+                ),
+                vol.Optional(
+                    CONF_SYSTEM_PROMPT,
+                    default=options.get(
+                        CONF_SYSTEM_PROMPT, DEFAULT_AI_TASK_SYSTEM_PROMPT
+                    ),
+                ): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+                ),
+                vol.Optional(
+                    CONF_TEMPERATURE,
+                    default=options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_TEMPERATURE,
+                        max=MAX_TEMPERATURE,
+                        step=0.1,
+                        mode=NumberSelectorMode.SLIDER,
+                    )
+                ),
+                vol.Optional(
+                    CONF_MAX_TOKENS,
+                    default=options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_MAX_TOKENS,
+                        max=MAX_MAX_TOKENS,
+                        step=256,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+            }
+        )
+
+    def _schema_structured(self, options: dict[str, Any]) -> vol.Schema:
+        return vol.Schema(
+            {
+                vol.Optional(
+                    CONF_AI_TASK_EXTRACTION_METHOD,
+                    default=options.get(
+                        CONF_AI_TASK_EXTRACTION_METHOD,
+                        DEFAULT_AI_TASK_EXTRACTION_METHOD,
+                    ),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(
+                                value=AI_TASK_EXTRACTION_NONE,
+                                label="None (raw text)",
+                            ),
+                            SelectOptionDict(
+                                value=AI_TASK_EXTRACTION_STRUCTURE,
+                                label="Structured output (JSON)",
+                            ),
+                            SelectOptionDict(
+                                value=AI_TASK_EXTRACTION_TOOL, label="Tool call"
+                            ),
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(
+                    CONF_AI_TASK_RETRIES,
+                    default=options.get(
+                        CONF_AI_TASK_RETRIES, DEFAULT_AI_TASK_RETRIES
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_AI_TASK_RETRIES,
+                        max=MAX_AI_TASK_RETRIES,
+                        step=1,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Optional(
+                    CONF_AI_TASK_ENABLE_VISION,
+                    default=_as_bool(
+                        options.get(CONF_AI_TASK_ENABLE_VISION), False
+                    ),
+                ): BooleanSelector(),
+            }
+        )
+
+    def _schema_ai_advanced(self, options: dict[str, Any]) -> vol.Schema:
+        return vol.Schema(
+            {
+                vol.Optional(
+                    CONF_REQUEST_TIMEOUT,
+                    default=options.get(
+                        CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_REQUEST_TIMEOUT,
+                        max=MAX_REQUEST_TIMEOUT,
+                        step=5,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
+            }
         )
 
     async def _fetch_models(self, entry: config_entries.ConfigEntry) -> list[str]:
