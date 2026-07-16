@@ -105,7 +105,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN]["rag_index"] = rag_index
 
     # Forward to platforms
+    _LOGGER.warning("LEMONADE-DIAG: forwarding platforms %s", PLATFORMS)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _LOGGER.warning("LEMONADE-DIAG: platforms forwarded for entry %s", entry.entry_id)
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 

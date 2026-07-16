@@ -8,12 +8,16 @@ state (Normal/Bajo/Medio/Alto) to pick the matching tone block.
 
 from __future__ import annotations
 
+import logging
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
 
 SARCASM_LEVEL_OPTIONS = ["Normal", "Bajo", "Medio", "Alto"]
 
@@ -24,7 +28,17 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the sarcasm-level select entity."""
-    async_add_entities([LemonadeSarcasmSelect(entry)])
+    _LOGGER.warning(
+        "LEMONADE-DIAG: select.async_setup_entry called for entry %s", entry.entry_id
+    )
+    entity = LemonadeSarcasmSelect(entry)
+    _LOGGER.warning(
+        "LEMONADE-DIAG: creating entity unique_id=%s object_id=%s",
+        entity.unique_id,
+        entity.suggested_object_id,
+    )
+    async_add_entities([entity])
+    _LOGGER.warning("LEMONADE-DIAG: async_add_entities called for sarcasm select")
 
 
 class LemonadeSarcasmSelect(SelectEntity):
