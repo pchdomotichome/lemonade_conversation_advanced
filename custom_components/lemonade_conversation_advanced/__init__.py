@@ -8,14 +8,27 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import llm
 
-from .const import DOMAIN, CONF_SERVER_URL, CONF_API_KEY
+from .api import LemonadeAPIClient
+from .const import (
+    DOMAIN,
+    CONF_SERVER_URL,
+    CONF_API_KEY,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
+)
+from .coordinator import LemonadeTelemetryCoordinator
 from .index_manager import IndexManager
 from .llm_tools import async_get_tools as local_async_get_tools
 from .rag import RAGIndex
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.CONVERSATION, Platform.AI_TASK, Platform.SELECT]
+PLATFORMS = [
+    Platform.CONVERSATION,
+    Platform.AI_TASK,
+    Platform.SELECT,
+    Platform.SENSOR,
+]
 
 
 def get_system_entry(hass: HomeAssistant) -> ConfigEntry | None:
@@ -98,6 +111,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "api_key": api_key,
     }
 
+    # Telemetry coordinator (one per server entry)
+    telemetry_client = LemonadeAPIClient(hass, server_url, api_key)
+    scan_interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    coordinator = LemonadeTelemetryCoordinator(
+        hass, telemetry_client, scan_interval
+    )
+    hass.data[DOMAIN][entry.entry_id]["coordinator"] = coordinator
+    await coordinator.async_config_entry_first_refresh()
+
     # Create per-entry RAG index (lazy-loaded)
     cache_dir = f"{hass.config.config_dir}/lemonade_rag_cache"
     rag_index = RAGIndex(cache_dir)
@@ -122,5 +144,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
+        entry_data = hass.data[DOMAIN].pop(entry.entry_id, {})
+        coordinator = entry_data.get("coordinator")
+        if coordinator is not None:
+            await coordinator.client.close()
     return unload_ok

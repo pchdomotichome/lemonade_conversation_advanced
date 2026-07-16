@@ -322,5 +322,45 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "server_version": {
+        "name": "Server version"
+      },
+      "model_loaded": {
+        "name": "Loaded model"
+      },
+      "loaded_models_count": {
+        "name": "Loaded models"
+      },
+      "cpu_percent": {
+        "name": "CPU usage"
+      },
+      "memory_gb": {
+        "name": "Memory usage"
+      },
+      "gpu_percent": {
+        "name": "GPU usage"
+      },
+      "vram_gb": {
+        "name": "VRAM usage"
+      },
+      "npu_percent": {
+        "name": "NPU usage"
+      },
+      "ttft_avg": {
+        "name": "Avg time to first token"
+      },
+      "tps_avg": {
+        "name": "Avg tokens per second"
+      },
+      "last_input_tokens": {
+        "name": "Last input tokens"
+      },
+      "last_output_tokens": {
+        "name": "Last output tokens"
+      }
+    }
   }
 }

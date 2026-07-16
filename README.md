@@ -48,6 +48,52 @@
 1. Copia el directorio `custom_components/lemonade_conversation_advanced` en tu directorio de configuración de Home Assistant (`config/custom_components/`)
 2. Reinicia Home Assistant
 
+## 📊 Telemetría y tarjeta Lovelace
+
+La integración crea un set de **sensores de telemetría** por servidor Lemonade
+(uno por entrada de configuración) que se actualizan cada `scan_interval`
+segundos (default 30):
+
+| Sensor | Describe |
+|--------|----------|
+| `sensor.lemonade_server_version` | Versión de Lemonade Server |
+| `sensor.lemonade_model_loaded` | Último modelo accedido |
+| `sensor.lemonade_loaded_models` | Cantidad de modelos en memoria (+ atributo `loaded_models` con type/dispositivo/recipe) |
+| `sensor.lemonade_cpu_percent` / `_gpu_percent` / `_npu_percent` | Uso de CPU/GPU/NPU (%) |
+| `sensor.lemonade_memory_gb` / `_vram_gb` | RAM y VRAM usadas (GiB) |
+| `sensor.lemonade_ttft_avg` | **Tiempo medio al primer token** (ventana móvil) |
+| `sensor.lemonade_tps_avg` | **Tokens por segundo medios** (ventana móvil) |
+| `sensor.lemonade_last_input_tokens` / `_last_output_tokens` | Tokens de la última request |
+
+Los valores que el hardware no expone (p. ej. NPU en equipos sin NPU)
+aparecen como `unknown` y se ocultan solos en la tarjeta.
+
+### Tarjeta `lemonade-card`
+
+Se registra automáticamente como recurso de front-end (HACS lo instala solo).
+Para usarla, añade una tarjeta manual con la lista de entidades:
+
+```yaml
+type: custom:lemonade-card
+entities:
+  server_version: sensor.lemonade_server_version
+  model_loaded: sensor.lemonade_model_loaded
+  loaded_models_count: sensor.lemonade_loaded_models
+  cpu_percent: sensor.lemonade_cpu_percent
+  memory_gb: sensor.lemonade_memory_gb
+  gpu_percent: sensor.lemonade_gpu_percent
+  vram_gb: sensor.lemonade_vram_gb
+  npu_percent: sensor.lemonade_npu_percent
+  ttft_avg: sensor.lemonade_ttft_avg
+  tps_avg: sensor.lemonade_tps_avg
+  last_input_tokens: sensor.lemonade_last_input_tokens
+  last_output_tokens: sensor.lemonade_last_output_tokens
+```
+
+La tarjeta muestra estado del servidor, barras de uso de hardware, métricas de
+respuesta (TTFT/tok-s) y la lista de modelos cargados, con un botón de
+refresco. Si no mapeas una entidad, ese panel queda vacío en vez de romper.
+
 ## ⚙️ Configuración
 
 1. Ve a **Settings** → **Devices & Services** → **Integrations**

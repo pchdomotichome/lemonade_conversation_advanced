@@ -28,6 +28,8 @@ CONF_SERVER_URL = "server_url"
 CONF_API_KEY = "api_key"
 
 DEFAULT_SERVER_URL = "http://localhost:13305"
+CONF_SCAN_INTERVAL = "scan_interval"
+DEFAULT_SCAN_INTERVAL = 30
 CONF_LEMONADE_URL = "lmstudio_url"
 CONF_MODEL_NAME = "model_name"
 CONF_LEMONADE_PORT = "mcp_port"

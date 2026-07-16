@@ -533,5 +533,45 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "server_version": {
+        "name": "Versión del servidor"
+      },
+      "model_loaded": {
+        "name": "Modelo cargado"
+      },
+      "loaded_models_count": {
+        "name": "Modelos cargados"
+      },
+      "cpu_percent": {
+        "name": "Uso de CPU"
+      },
+      "memory_gb": {
+        "name": "Uso de memoria"
+      },
+      "gpu_percent": {
+        "name": "Uso de GPU"
+      },
+      "vram_gb": {
+        "name": "Uso de VRAM"
+      },
+      "npu_percent": {
+        "name": "Uso de NPU"
+      },
+      "ttft_avg": {
+        "name": "Tiempo medio al primer token"
+      },
+      "tps_avg": {
+        "name": "Tokens por segundo (media)"
+      },
+      "last_input_tokens": {
+        "name": "Tokens de entrada (última)"
+      },
+      "last_output_tokens": {
+        "name": "Tokens de salida (última)"
+      }
+    }
   }
 }

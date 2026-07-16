@@ -80,6 +80,58 @@ class LemonadeAPIClient:
         )
 
     # ------------------------------------------------------------------ #
+    #  Telemetry GETs (health / stats / system-stats)                     #
+    # ------------------------------------------------------------------ #
+
+    async def get_health(self) -> dict[str, Any] | None:
+        """Return the raw /v1/health payload, or None on failure."""
+        session = await self._get_session()
+        try:
+            async with session.get(
+                f"{self._server_url}/v1/health",
+                headers=self._build_headers(),
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status >= 400:
+                    return None
+                return await resp.json()
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            _LOGGER.debug("get_health failed: %s", err)
+            return None
+
+    async def get_stats(self) -> dict[str, Any] | None:
+        """Return the raw /v1/stats payload (last request), or None."""
+        session = await self._get_session()
+        try:
+            async with session.get(
+                f"{self._server_url}/v1/stats",
+                headers=self._build_headers(),
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status >= 400:
+                    return None
+                return await resp.json()
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            _LOGGER.debug("get_stats failed: %s", err)
+            return None
+
+    async def get_system_stats(self) -> dict[str, Any] | None:
+        """Return the raw /v1/system-stats payload, or None."""
+        session = await self._get_session()
+        try:
+            async with session.get(
+                f"{self._server_url}/v1/system-stats",
+                headers=self._build_headers(),
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status >= 400:
+                    return None
+                return await resp.json()
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            _LOGGER.debug("get_system_stats failed: %s", err)
+            return None
+
+    # ------------------------------------------------------------------ #
     #  Health check                                                        #
     # ------------------------------------------------------------------ #
 
