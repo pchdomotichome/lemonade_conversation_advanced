@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections import deque
 from datetime import timedelta
@@ -74,7 +75,7 @@ class LemonadeTelemetryCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return merged
 
     async def _fetch(self):
-        return await self.hass.async_gather(
+        return await asyncio.gather(
             self._client.get_health(),
             self._client.get_system_stats(),
             self._client.get_stats(),
