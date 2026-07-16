@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -35,7 +36,7 @@ class LemonadeTelemetryCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass,
             _LOGGER,
             name="lemonade_telemetry",
-            update_interval=scan_interval,
+            update_interval=timedelta(seconds=scan_interval),
         )
         self._client = client
         self._ttft: deque[float] = deque(maxlen=_TTFT_WINDOW)
