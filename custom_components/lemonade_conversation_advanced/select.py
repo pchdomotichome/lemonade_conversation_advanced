@@ -44,16 +44,16 @@ async def async_setup_entry(
 class LemonadeSarcasmSelect(SelectEntity):
     """Sarcasm intensity level for the Sarcastic Argentine persona."""
 
-    _attr_has_entity_name = True
-    _attr_name = "Nivel de Sarcasmo"
+    _attr_has_entity_name = False
+    _attr_name = "Lemonade Nivel de Sarcasmo"
     _attr_options = SARCASM_LEVEL_OPTIONS
     _attr_current_option = "Normal"
     _attr_should_poll = False
-    _attr_suggested_object_id = "lemonade_sarcasm_level"
 
     def __init__(self, entry: ConfigEntry) -> None:
         """Initialize the entity."""
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_sarcasm_level"
+        self.entity_id = "select.lemonade_sarcasm_level"
         self._entry = entry
 
     async def async_added_to_hass(self) -> None:
