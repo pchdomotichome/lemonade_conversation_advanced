@@ -119,8 +119,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     hass.data[DOMAIN][entry.entry_id]["coordinator"] = coordinator
     await coordinator.async_config_entry_first_refresh()
-        await hass.http.async_register_static_paths(paths)
-        frontend.add_extra_js_url(hass, "/lemonade-card.js")
 
     # Create per-entry RAG index (lazy-loaded)
     cache_dir = f"{hass.config.config_dir}/lemonade_rag_cache"
