@@ -127,7 +127,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     card_path = os.path.join(os.path.dirname(__file__), "www", "lemonade-card.js")
     if os.path.exists(card_path):
         await hass.http.async_register_static_paths(
-            [{"path": "/lemonade-card.js", "filepath": card_path}]
+            [{"url_path": "/lemonade-card.js", "filepath": card_path, "cache_headers": False}]
         )
         frontend.add_extra_js_url(hass, "/lemonade-card.js")
 
