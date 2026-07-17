@@ -4,6 +4,7 @@ import logging
 import os
 
 from homeassistant.components import frontend
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -127,7 +128,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     card_path = os.path.join(os.path.dirname(__file__), "www", "lemonade-card.js")
     if os.path.exists(card_path):
         await hass.http.async_register_static_paths(
-            [{"url_path": "/lemonade-card.js", "filepath": card_path, "cache_headers": False}]
+            [StaticPathConfig("/lemonade-card.js", card_path, cache_headers=False)]
         )
         frontend.add_extra_js_url(hass, "/lemonade-card.js")
 
