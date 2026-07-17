@@ -1,7 +1,7 @@
 {
   "domain": "lemonade_conversation_advanced",
   "name": "Lemonade Conversation Advanced",
-  "version": "0.1.0-beta.78",
+  "version": "0.1.0-beta.79",
   "config_flow": true,
   "integration_type": "service",
   "documentation": "https://github.com/pchdomotichome/lemonade_conversation_advanced",
@@ -17,6 +17,12 @@
     "intent"
   ],
   "iot_class": "local_polling",
+  "resources": [
+    {
+      "url": "/static/lemonade_conversation_advanced/www/lemonade-card.js",
+      "type": "module"
+    }
+  ],
   "codeowners": [
     "@pchdomotichome"
   ]

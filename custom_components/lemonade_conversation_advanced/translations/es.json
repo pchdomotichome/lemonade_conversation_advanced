@@ -540,9 +540,6 @@
         "name": "Versión del servidor"
       },
       "model_loaded": {
-        "name": "Modelo cargado"
-      },
-      "loaded_models_count": {
         "name": "Modelos cargados"
       },
       "cpu_percent": {

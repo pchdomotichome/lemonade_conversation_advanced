@@ -34,7 +34,6 @@ async def async_setup_entry(
         [
             LemonadeVersionSensor(coordinator),
             LemonadeModelLoadedSensor(coordinator),
-            LemonadeLoadedModelsSensor(coordinator),
             LemonadeCpuSensor(coordinator),
             LemonadeMemorySensor(coordinator),
             LemonadeGpuSensor(coordinator),
@@ -81,6 +80,7 @@ class LemonadeVersionSensor(_LemonadeSensor):
 
 class LemonadeModelLoadedSensor(_LemonadeSensor):
     _attr_icon = "mdi:brain"
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "model_loaded"
 
     @property
@@ -89,21 +89,9 @@ class LemonadeModelLoadedSensor(_LemonadeSensor):
 
     @property
     def native_value(self):
-        return self.coordinator.data.get("health", {}).get("model_loaded")
-
-
-class LemonadeLoadedModelsSensor(_LemonadeSensor):
-    _attr_icon = "mdi:layers"
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_translation_key = "loaded_models_count"
-
-    @property
-    def _key(self) -> str:
-        return "loaded_models_count"
-
-    @property
-    def native_value(self):
-        return len(self.coordinator.data.get("health", {}).get("all_models_loaded", []))
+        return len(
+            self.coordinator.data.get("health", {}).get("all_models_loaded", [])
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

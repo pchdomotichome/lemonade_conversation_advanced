@@ -329,9 +329,6 @@
         "name": "Server version"
       },
       "model_loaded": {
-        "name": "Loaded model"
-      },
-      "loaded_models_count": {
         "name": "Loaded models"
       },
       "cpu_percent": {
