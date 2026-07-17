@@ -126,8 +126,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # register it as a frontend resource so it shows up without manual setup.
     card_path = os.path.join(os.path.dirname(__file__), "www", "lemonade-card.js")
     if os.path.exists(card_path):
-        hass.http.register_static_path(
-            "/lemonade-card.js", card_path, cache_headers=False
+        hass.http.async_register_static_paths(
+            [{"path": "/lemonade-card.js", "filepath": card_path}]
         )
         frontend.add_extra_js_url(hass, "/lemonade-card.js")
 
