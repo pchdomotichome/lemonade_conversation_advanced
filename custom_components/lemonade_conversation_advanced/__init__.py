@@ -1,10 +1,7 @@
 """The Lemonade Conversation Advanced integration."""
 
 import logging
-import os
 
-from homeassistant.components import frontend
-from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -122,19 +119,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     hass.data[DOMAIN][entry.entry_id]["coordinator"] = coordinator
     await coordinator.async_config_entry_first_refresh()
-
-    # Serve the Lovelace card JS (and its bundled Lit dep) from the
-    # component's www/ folder, and register the card as a frontend resource
-    # so it shows up in the card picker without manual setup.
-    www_dir = os.path.join(os.path.dirname(__file__), "www")
-    card_path = os.path.join(www_dir, "lemonade-card.js")
-    lit_path = os.path.join(www_dir, "lit.js")
-    if os.path.exists(card_path):
-        paths = [StaticPathConfig("/lemonade-card.js", card_path, cache_headers=False)]
-        if os.path.exists(lit_path):
-            paths.append(StaticPathConfig("/lit.js", lit_path, cache_headers=False))
-        await hass.http.async_register_static_paths(paths)
-        frontend.add_extra_js_url(hass, "/lemonade-card.js")
         await hass.http.async_register_static_paths(paths)
         frontend.add_extra_js_url(hass, "/lemonade-card.js")
 
