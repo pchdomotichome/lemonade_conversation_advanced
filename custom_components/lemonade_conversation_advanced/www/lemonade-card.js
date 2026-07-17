@@ -98,7 +98,6 @@ class LemonadeCard extends LitElement {
       entities: {
         server_version: find("version"),
         model_loaded: find("model_loaded"),
-        loaded_models_count: find("loaded_models_count"),
         cpu_percent: find("cpu_percent"),
         memory_gb: find("memory_gb"),
         gpu_percent: find("gpu_percent"),
@@ -151,7 +150,7 @@ class LemonadeCard extends LitElement {
 
     const version = this._state("server_version");
     const model = this._state("model_loaded");
-    const count = this._num("loaded_models_count");
+    const count = this._num("model_loaded");
 
     const bars = BAR_KEYS.map((b) => {
       const v = this._num(b.key);
@@ -178,7 +177,7 @@ class LemonadeCard extends LitElement {
         </div>`
     );
 
-    const models = this._attr("loaded_models_count", "loaded_models") || [];
+    const models = this._attr("model_loaded", "loaded_models") || [];
     const modelRows = models.length
       ? models.map(
           (m) => html`
