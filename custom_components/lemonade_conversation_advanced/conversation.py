@@ -611,11 +611,6 @@ class LemonadeConversationEntity(
                 return inserted
             return insert_idx
 
-        respect_exposure = bool(
-            self.subentry.data.get(
-                CONF_RESPECT_EXPOSURE, DEFAULT_RESPECT_EXPOSURE
-            )
-        )
         enabled_domains = self.subentry.data.get(
             CONF_ENABLED_DOMAINS, DEFAULT_ENABLED_DOMAINS
         )
@@ -629,11 +624,9 @@ class LemonadeConversationEntity(
         def _should_inject(e: er.RegistryEntry) -> bool:
             if enabled_domains_set and e.domain not in enabled_domains_set:
                 return False
-            if not respect_exposure:
-                return True
-            return async_should_expose(
-                self.hass, "conversation", e.entity_id
-            )
+            # Read-only context: include non-exposed entities too so the
+            # model can answer truthfully about real states.
+            return True
 
         for area_entry in matched_areas:
             # Collect entities matching this area + optional domain filter
@@ -723,11 +716,6 @@ class LemonadeConversationEntity(
         has the data inline and can answer without tool calls.
         """
         entity_registry = er.async_get(self.hass)
-        respect_exposure = bool(
-            self.subentry.data.get(
-                CONF_RESPECT_EXPOSURE, DEFAULT_RESPECT_EXPOSURE
-            )
-        )
         enabled_domains = self.subentry.data.get(
             CONF_ENABLED_DOMAINS, DEFAULT_ENABLED_DOMAINS
         )
@@ -738,21 +726,21 @@ class LemonadeConversationEntity(
             CONF_ENTITY_ALIASES, DEFAULT_ENTITY_ALIASES
         )
 
+        # Read-only context injection: do NOT gate on conversation
+        # exposure. Exposure only matters for control actions; here we
+        # just surface actual states so the model can answer truthfully
+        # (e.g. a light the user forgot to expose still shows as on).
         domain_entities = []
         for e in entity_registry.entities.values():
             if e.domain != domain:
                 continue
             if enabled_domains_set and e.domain not in enabled_domains_set:
                 continue
-            if respect_exposure and not async_should_expose(
-                self.hass, "conversation", e.entity_id
-            ):
-                continue
             domain_entities.append(e)
 
         if not domain_entities:
             _LOGGER.debug(
-                "No exposed entities for domain '%s' to inject", domain
+                "No entities for domain '%s' to inject", domain
             )
             return start_idx
 
