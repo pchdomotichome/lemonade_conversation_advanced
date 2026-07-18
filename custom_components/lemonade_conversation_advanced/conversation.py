@@ -676,10 +676,10 @@ class LemonadeConversationEntity(
                 state_obj = self.hass.states.get(entity_entry.entity_id)
                 if state_obj is None:
                     continue
-                friendly = (
-                    entity_entry.name
-                    or entity_entry.original_name
-                    or entity_entry.entity_id
+                friendly = self._pretty_entity_name(
+                    entity_entry.entity_id,
+                    entity_entry.name or entity_entry.original_name,
+                    state_obj,
                 )
                 alias = entity_aliases.get(entity_entry.entity_id)
                 if alias:
@@ -753,10 +753,10 @@ class LemonadeConversationEntity(
             state_obj = self.hass.states.get(entity_entry.entity_id)
             if state_obj is None:
                 continue
-            friendly = (
-                entity_entry.name
-                or entity_entry.original_name
-                or entity_entry.entity_id
+            friendly = self._pretty_entity_name(
+                entity_entry.entity_id,
+                entity_entry.name or entity_entry.original_name,
+                state_obj,
             )
             alias = entity_aliases.get(entity_entry.entity_id)
             if alias:
@@ -795,6 +795,29 @@ class LemonadeConversationEntity(
             "initial_state",
         }
     )
+
+    @staticmethod
+    def _pretty_entity_name(
+        entity_id: str,
+        registry_name: str | None,
+        state_obj: Any,
+    ) -> str:
+        """Return a human-readable name, never a raw entity_id.
+
+        Falls back to the state's friendly_name attribute, then to a
+        humanized version of the entity_id (e.g. 'luz_1s_comedor' ->
+        'Luz 1s Comedor') so the model cites a readable label.
+        """
+        name = registry_name or (
+            state_obj.attributes.get("friendly_name") if state_obj else None
+        )
+        if name:
+            return str(name)
+        # Humanize the entity_id: strip domain prefix, split on _,
+        # title-case, keep trailing tokens like '1s'/'2n' uppercased.
+        slug = entity_id.split(".", 1)[-1]
+        parts = [p.upper() if p[:1].isdigit() else p.capitalize() for p in slug.split("_")]
+        return " ".join(parts)
 
     @staticmethod
     def _format_entity_state(
