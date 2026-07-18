@@ -7,7 +7,6 @@ from typing import Literal
 import voluptuous as vol
 
 from homeassistant.helpers import llm
-from homeassistant.const import CONF_LLM_HASS_API
 from homeassistant.core import HomeAssistant
 from homeassistant.util.json import JsonObjectType
 

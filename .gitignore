@@ -1,6 +1,17 @@
+# Python
 __pycache__/
 *.pyc
+*.pyo
+
+# Build/vendor artifacts
 custom_components/lemonade_conversation_advanced/www/node_modules/
 custom_components/lemonade_conversation_advanced/www/package*.json
 custom_components/lemonade_conversation_advanced/www/entry.js
 custom_components/lemonade_conversation_advanced/www/lit_full.js
+
+# Local tooling / scratch (not part of the integration)
+.mimocode/
+.hermes/
+archive/
+docs/
+research/

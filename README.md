@@ -1,235 +1,163 @@
-# 🧠 Lemonade Conversation Advanced for Home Assistant
+# 🧠 Lemonade Conversation Advanced para Home Assistant
 
 [![GitHub Release](https://img.shields.io/github/release/pchdomotichome/lemonade_conversation_advanced.svg)](https://github.com/pchdomotichome/lemonade_conversation_advanced/releases)
 [![License](https://img.shields.io/github/license/pchdomotichome/lemonade_conversation_advanced.svg)](LICENSE)
-[![HA Version](https://img.shields.io/badge/Home%20Assistant-2025.7+-blue.svg)](https://www.home-assistant.io/)
-[![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz/)
 
 > 🔧 **Integración avanzada para usar Lemonade Server como asistente de conversación en Home Assistant**
 
 ## 📌 Descripción
 
-**Lemonade Conversation Advanced** es una integración completa para Home Assistant que permite utilizar modelos de lenguaje grandes (LLM) locales a través de [Lemonade Server](https://lemonade-server.ai/). Combina las capacidades del servidor Lemonade con el asistente de voz de Home Assistant, creando un asistente inteligente similar a Google Home o Alexa, pero completamente local, privado y personalizable.
+**Lemonade Conversation Advanced** es una integración para Home Assistant que usa
+[Lemonade Server](https://lemonade-server.ai/) (modelos locales, GGUF/ONNX) como
+agente de conversación con function-calling nativo. Permite controlar y consultar
+dispositivos de tu hogar por voz o texto, con respuestas fluidas vía streaming.
 
 ## 🚀 Características
 
-- ✅ **Integración nativa** como agente de conversación en Home Assistant
-- ✅ **Gestión completa de modelos** (pull, load, unload, list) desde HA
-- ✅ **Custom LLM API** con 6 tools Lemonade-specific para que el LLM gestione sus propios modelos
-- ✅ **Sensors de hardware** en tiempo real (VRAM, NPU, GPU, modelo cargado, health)
-- ✅ **Function calling nativo** OpenAI-compatible para control de Home Assistant
-- ✅ **Streaming responses** para voice pipeline fluido
-- ✅ **AI Task entities** nativas (theme generator, entity extractor, summarizer, intent classifier)
-- ✅ **Multi-model support** con subentries (diferentes modelos para diferentes tareas)
-- ✅ **Multi-backend** (llama.cpp, RyzenAI NPU, vLLM, FastFlowLM)
-- ✅ **Configuración via UI** completa (Config Flow + Options Flow)
-- ✅ **Servicios personalizados** (12+ servicios para gestión total)
-- ✅ **Compatible con Wyoming** (STT/TTS) para pipeline de voz completo
+- ✅ Agente de conversación nativo de Home Assistant (compatible con Voice Pipeline)
+- ✅ **Inyección de estados en contexto**: ante preguntas como *"¿hay luces prendidas?"*, el asistente recibe el estado real de las entidades y responde sin tener que llamar tools
+- ✅ **Tools LLM** para controlar dispositivos: `get_entity_state`, `turn_on_entity`, `turn_off_entity`, `toggle_entity`, `set_entity_value`, `get_entities_in_area`, `run_script`, `activate_scene`, `web_search`
+- ✅ **Instrucciones técnicas** configurables (campo *Instrucciones Técnicas*) para ajustar el comportamiento sin tocar código
+- ✅ **Niveles de personalidad/sarcasmo** seleccionables (Predeterminada, Pirata, Robot, Mayordomo, Sarcástico Argentino, Personalizada)
+- ✅ **Streaming** para pipelines de voz fluidos
+- ✅ **Telemetría** del servidor Lemonade (sensores de hardware y performance)
+- ✅ **AI Task entities** (tema generator, extractor de entidades, resumen, clasificador de intención)
+- ✅ **RAG local** opcional para recuperar entidades por palabras clave
+- ✅ Multi-modelo vía subentries (distintos modelos por tarea)
+- ✅ Configuración completa por UI (Config Flow + Options Flow)
 
 ## 🛠️ Requisitos
 
 - Home Assistant 2025.7 o superior
-- Lemonade Server 10.x corriendo en tu red local
-- Acceso a modelos compatibles (GGUF, ONNX, FLM)
-- Python 3.12+
+- [Lemonade Server](https://lemonade-server.ai/) corriendo en tu red local (accesible por HTTP)
+- Un modelo compatible cargado en Lemonade Server (GGUF, ONNX, FLM)
+- Conexión de red entre HA y el servidor Lemonade
 
 ## 📦 Instalación
 
-### Opción 1: A través de HACS (Recomendado)
+### Opción 1: HACS (Recomendado)
 
-1. En Home Assistant, ve a **Settings** → **Devices & Services** → **Integrations**
-2. Haz clic en el botón **+ Add Integration**
-3. Busca **"Lemonade Conversation Advanced"**
-4. Instala la integración
+1. Añade este repo como **Custom Repository** en HACS (categoría *Integration*):
+   `https://github.com/pchdomotichome/lemonade_conversation_advanced`
+2. Busca **Lemonade Conversation Advanced** e instálala.
+3. Reinicia Home Assistant.
 
 ### Opción 2: Manual
 
-1. Copia el directorio `custom_components/lemonade_conversation_advanced` en tu directorio de configuración de Home Assistant (`config/custom_components/`)
-2. Reinicia Home Assistant
+1. Copia `custom_components/lemonade_conversation_advanced` a
+   `config/custom_components/` de tu Home Assistant.
+2. Reinicia Home Assistant.
 
-## 📊 Telemetría y tarjeta Lovelace
+## ⚙️ Configuración
 
-La integración crea un set de **sensores de telemetría** por servidor Lemonade
-(uno por entrada de configuración) que se actualizan cada `scan_interval`
-segundos (default 30):
+1. **Settings → Devices & Services → Integrations → + Add Integration**.
+2. Busca **Lemonade Conversation Advanced**.
+3. **Paso 1 – Conexión**: URL del servidor (ej. `http://10.0.98.218:13305`) y
+   API Key opcional (si Lemonade tiene auth).
+4. **Paso 2 – Modelo**: elige el modelo por defecto y parámetros (temperatura,
+   max tokens, streaming, timeout).
+5. **Subentries (asistentes)**: desde *Configure* en la integración podés crear
+   uno o más asistentes (*conversation subentries*), cada uno con su propio
+   modelo, personalidad, idioma y comportamiento.
+
+> Para usar el asistente por voz, asignalo en
+> **Settings → Voice Assistants → (tu asistente) → Conversation agent**.
+
+## 🎯 Cómo responde a preguntas (inyección de estados)
+
+Cuando preguntás algo sobre dispositivos, la integración inyecta automáticamente
+el estado actual de las entidades relevantes en el contexto del modelo:
+
+- Si nombrás un **área** (ej. *"¿qué luces hay en el comedor?"*), se inyectan las
+  entidades de esa área.
+- Si preguntás por un **dominio sin área** (ej. *"¿hay alguna luz encendida?"*),
+  se inyectan **todas** las entidades de ese dominio (aunque no estén expuestas
+  al agente de conversación), para que el modelo responda con la verdad.
+
+El modelo cita el **nombre amigable** de la entidad (no el `entity_id`), y las
+respuestas se limpian de formato markdown para que el TTS lea natural.
+
+## 🔧 Instrucciones Técnicas (comportamiento configurable)
+
+El campo **Instrucciones Técnicas** del asistente permite cambiar el comportamiento
+del modelo sin editar código. Soporta placeholders que se rellenan en runtime:
+
+| Placeholder | Contenido |
+|-------------|-----------|
+| `{index}` | Índice compacto de áreas y dominios del hogar |
+| `{response_mode}` | Reglas de follow-up según el modo configurado |
+| `{time}` / `{date}` | Hora y fecha actuales |
+| `{current_area}` | Área actual (si la provee HA) |
+
+Por defecto trae instrucciones que: describen las tools disponibles, indican que
+para lectura use los estados inyectados (sin llamar tools), y que para control
+use los `entity_id` mostrados. Podés reemplazarlo por tu propio texto.
+
+## 🤖 Tools LLM disponibles
+
+El asistente puede controlar y consultar HA por sí solo:
+
+| Tool | Acción |
+|------|--------|
+| `get_entity_state` | Estado actual de una entidad |
+| `turn_on_entity` / `turn_off_entity` / `toggle_entity` | Encender/apagar/alternar |
+| `set_entity_value` | Fijar valor (brillo, temperatura, volumen…) |
+| `get_entities_in_area` | Listar entidades de un área |
+| `run_script` / `activate_scene` | Ejecutar script / escena |
+| `web_search` | Búsqueda web (si está habilitada) |
+
+## 📊 Sensores de telemetría
+
+Por cada servidor Lemonade se crea un juego de sensores (se actualizan cada
+`scan_interval`, default 30 s):
 
 | Sensor | Describe |
 |--------|----------|
 | `sensor.lemonade_server_version` | Versión de Lemonade Server |
-| `sensor.lemonade_model_loaded` | Último modelo accedido |
-| `sensor.lemonade_loaded_models` | Cantidad de modelos en memoria (+ atributo `loaded_models` con type/dispositivo/recipe) |
-| `sensor.lemonade_cpu_percent` / `_gpu_percent` / `_npu_percent` | Uso de CPU/GPU/NPU (%) |
+| `sensor.lemonade_model_loaded` | Último modelo accedido (atributo `loaded_models` con la lista) |
+| `sensor.lemonade_cpu_percent` / `_gpu_percent` / `_npu_percent` | Uso CPU/GPU/NPU (%) |
 | `sensor.lemonade_memory_gb` / `_vram_gb` | RAM y VRAM usadas (GiB) |
-| `sensor.lemonade_ttft_avg` | **Tiempo medio al primer token** (ventana móvil) |
-| `sensor.lemonade_tps_avg` | **Tokens por segundo medios** (ventana móvil) |
+| `sensor.lemonade_ttft_avg` | Tiempo medio al primer token (s) |
+| `sensor.lemonade_tps_avg` | Tokens por segundo medios |
 | `sensor.lemonade_last_input_tokens` / `_last_output_tokens` | Tokens de la última request |
 
-Los valores que el hardware no expone (p. ej. NPU en equipos sin NPU)
-aparecen como `unknown` y se ocultan solos en la tarjeta.
+Los valores que el hardware no expone (p. ej. NPU sin NPU) quedan `unknown`.
 
-### Tarjeta `lemonade-card`
+## 🧩 AI Task entities
 
-Se registra automáticamente como recurso de front-end (HACS lo instala solo).
-Para usarla, añade una tarjeta manual con la lista de entidades:
+- `ai_task.lemonade_theme_generator` — genera temas YAML
+- `ai_task.lemonade_extract_entities` — extrae entidades de un texto
+- `ai_task.lemonade_summarize` — resume texto
+- `ai_task.lemonade_classify_intent` — clasifica la intención de un comando HA
 
-```yaml
-type: custom:lemonade-card
-entities:
-  server_version: sensor.lemonade_server_version
-  model_loaded: sensor.lemonade_model_loaded
-  loaded_models_count: sensor.lemonade_loaded_models
-  cpu_percent: sensor.lemonade_cpu_percent
-  memory_gb: sensor.lemonade_memory_gb
-  gpu_percent: sensor.lemonade_gpu_percent
-  vram_gb: sensor.lemonade_vram_gb
-  npu_percent: sensor.lemonade_npu_percent
-  ttft_avg: sensor.lemonade_ttft_avg
-  tps_avg: sensor.lemonade_tps_avg
-  last_input_tokens: sensor.lemonade_last_input_tokens
-  last_output_tokens: sensor.lemonade_last_output_tokens
-```
+## 🔗 Voice Pipeline
 
-La tarjeta muestra estado del servidor, barras de uso de hardware, métricas de
-respuesta (TTFT/tok-s) y la lista de modelos cargados, con un botón de
-refresco. Si no mapeas una entidad, ese panel queda vacío en vez de romper.
+Compatible con el pipeline de voz de HA (STT + TTS + VAD). Recomendado:
+Whisper/faster-whisper para STT y Piper para TTS vía Wyoming.
 
-## ⚙️ Configuración
-
-1. Ve a **Settings** → **Devices & Services** → **Integrations**
-2. Haz clic en **+ Add Integration**
-3. Busca **"Lemonade Conversation Advanced"**
-4. **Paso 1 - Conexión**: Ingresa la URL del servidor Lemonade:
-   - Ejemplo: `http://10.0.98.218:13305`
-   - API Key (opcional si Lemonade tiene auth habilitado)
-5. **Paso 2 - Modelo**: Selecciona un modelo de los disponibles
-6. **Paso 3 - Parámetros**: Configura temperatura, max tokens, streaming
-
-## 🔧 Funcionalidades Avanzadas
-
-### 🔄 Gestión de Modelos (via Services o LLM Tools)
-
-```yaml
-# Cargar modelo específico
-service: lemonade_conversation_advanced.load_model
-data:
-  model_name: "user.Llama-3.2-1B-Instruct-GGUF"
-  ctx_size: 8192
-  gpu_layers: -1
-  backend: "llamacpp"
-
-# Descargar modelo del registry
-service: lemonade_conversation_advanced.pull_model
-data:
-  model_name: "user.Dolphin3.0-Llama3.2-3B-GGUF"
-  checkpoint: "main"
-  recipe: "llamacpp"
-
-# Listar todos los modelos
-service: lemonade_conversation_advanced.list_models
-data:
-  show_all: true
-```
-
-### 🤖 Tools LLM (el LLM puede auto-gestionarse)
-
-El LLM tiene acceso a estas tools nativas:
-- `lemonade_pull_model` - Descargar modelos
-- `lemonade_load_model` - Cargar modelos en memoria
-- `lemonade_unload_model` - Descargar modelos de memoria
-- `lemonade_list_models` - Listar modelos disponibles
-- `lemonade_system_info` - Info de hardware, backends, modelos cargados
-- `lemonade_get_stats` - Estadísticas de performance
-
-### 📊 Sensors Disponibles
-
-| Sensor | Descripción |
-|--------|-------------|
-| `sensor.lemonade_health` | Estado del servidor (healthy/unhealthy) |
-| `sensor.lemonade_loaded_model` | Modelo actualmente cargado |
-| `sensor.lemonade_vram_usage` | Uso de VRAM en MB |
-| `sensor.lemonade_npu_usage` | Uso de NPU (0-100%) |
-| `sensor.lemonade_model_count` | Modelos descargados/cargados |
-| `sensor.lemonade_gpu_usage` | Uso de GPU |
-| `sensor.lemonade_inference_speed` | Velocidad de inferencia (tokens/s) |
-
-### 🎯 AI Task Entities
-
-- `ai_task.lemonade_theme_generator` - Generar temas YAML
-- `ai_task.lemonade_extract_entities` - Extraer entidades de texto
-- `ai_task.lemonade_summarize` - Resumir texto
-- `ai_task.lemonade_classify_intent` - Clasificar intención HA
-
-## 🏗️ Arquitectura
-
-```
-custom_components/lemonade_conversation_advanced/
-├── __init__.py                 # Entry point, backend registry
-├── manifest.json               # Metadatos HA
-├── const.py                    # Constantes y defaults
-├── config_flow.py              # Config Flow + Options Flow (3 steps)
-├── conversation.py             # ConversationAgent (streaming + tools)
-├── ai_task.py                  # AI Task entities (4 tasks)
-├── sensor.py                   # 7 Sensors con Coordinator
-├── llm_api.py                  # Custom LLM API (6 tools)
-├── client.py                   # LemonadeClient (aiohttp + AsyncOpenAI)
-├── backends/
-│   ├── __init__.py
-│   └── openai_compat.py        # Backend OpenAI-compatible
-├── services.py                 # Service handlers
-├── services.yaml               # Definiciones de servicios
-├── utils.py                    # Streaming parser, thinking blocks
-├── exceptions.py               # Excepciones tipadas
-└── translations/
-    └── en.json                 # Strings UI
-```
-
-## 🔗 Integración con Voice Pipeline
-
-Compatible con Wyoming para pipeline de voz completo:
-
-- **STT**: faster-whisper via Wyoming
-- **TTS**: Piper via Wyoming
-- **VAD**: Silero VAD
-- **Barge-in**: Cancelar TTS si usuario habla
-
-## 🧪 Testing
+## 🧪 Verificación rápida
 
 ```bash
-# Ejecutar tests
-pytest custom_components/lemonade_conversation_advanced/tests/
-
-# Coverage
-pytest --cov=custom_components.lemonade_conversation_advanced
+python3 scripts/smoke_check.py
 ```
+
+Valida sintaxis, JSON de manifest/strings/translations y archivos esperados.
 
 ## 🤝 Contribuciones
 
-¡Las contribuciones son bienvenidas! Por favor:
-
 1. Fork el repositorio
-2. Crea una rama para tu feature (`git checkout -b feat/nueva-funcionalidad`)
-3. Commit tus cambios (`git commit -m 'feat: agregar nueva funcionalidad'`)
-4. Push a la rama (`git push origin feat/nueva-funcionalidad`)
-5. Abre un Pull Request
+2. Crea una rama (`git checkout -b feat/nueva-funcionalidad`)
+3. Commit (`git commit -m 'feat: ...'`)
+4. Push y abre un Pull Request
 
 ## 📄 Licencia
 
-Este proyecto está licenciado bajo la Licencia MIT - mira el archivo [LICENSE](LICENSE) para detalles.
+MIT — ver [LICENSE](LICENSE).
 
-## 🧑‍💻 Desarrollador
+## 🧑‍💻 Autor
 
-Desarrollado por [pchdomotichome](https://github.com/pchdomotichome)
-
----
-
-## 🙏 Agradecimientos
-
-- [Lemonade Server](https://lemonade-server.ai/) por el servidor de inferencia increíble
-- [extended_openai_conversation](https://github.com/jekalmin/extended_openai_conversation) por patterns de function calling
-- [home-llm](https://github.com/acon96/home-llm) por arquitectura multi-backend y streaming
-- [hass-agent-llm](https://github.com/aradlein/hass-agent-llm) por memory system y dual-LLM
-- [ai_agent_ha](https://github.com/sbenodiz/ai_agent_ha) por dashboard/automation generation
+[pchdomotichome](https://github.com/pchdomotichome)
 
 ---
 

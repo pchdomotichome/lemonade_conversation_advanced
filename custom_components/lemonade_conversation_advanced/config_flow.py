@@ -10,11 +10,10 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import aiohttp_client, config_validation as cv, llm
+from homeassistant.helpers import config_validation as cv, llm
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.data_entry_flow import section
 from homeassistant.helpers.selector import (
     BooleanSelector,
     EntitySelector,
@@ -47,13 +46,6 @@ from .const import (
     DEFAULT_INCLUDE_EXAMPLES,
     DEFAULT_PERSONALITY,
     DEFAULT_SARCASM_ENTITY,
-    PERSONALITY_BUTLER,
-    PERSONALITY_CUSTOM,
-    PERSONALITY_DEFAULT,
-    PERSONALITY_EXAMPLES,
-    PERSONALITY_PIRATE,
-    PERSONALITY_ROBOT,
-    PERSONALITY_SARCASTIC_AR,
     CONF_AI_TASK_EXTRACTION_METHOD,
     CONF_AI_TASK_RETRIES,
     CONF_API_KEY,
@@ -120,14 +112,12 @@ from .const import (
     DEFAULT_MAX_RETRIES,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MAX_ENTITIES_PER_DISCOVERY,
-    DEFAULT_MODEL_NAME,
     DEFAULT_RAG_TOP_K,
     DEFAULT_REQUEST_TIMEOUT,
     DEFAULT_RESPECT_EXPOSURE,
     DEFAULT_RESPONSE_MODE,
     DEFAULT_RETRY_BACKOFF,
     DEFAULT_SERVER_URL,
-    DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEMPERATURE,
     DOMAIN,
     MAX_MAX_ENTITIES_PER_DISCOVERY,

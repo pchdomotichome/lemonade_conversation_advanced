@@ -10,19 +10,14 @@ import json
 import logging
 import os
 import re
-from collections import Counter
 from pathlib import Path
 from typing import Any
-
-import aiohttp
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.components.homeassistant import async_should_expose
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_reg
 from homeassistant.helpers.area_registry import async_get as async_get_area_reg
-
-from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -149,7 +144,6 @@ async def build_rag_instructions(
         await index.refresh(hass)
 
     entity_list = []
-    area_reg = async_get_area_reg(hass)
     for e in index._entries:
         entity_list.append(f"{e['entity_id']} ({e['domain']}) in {e['area'] or 'unassigned'}")
 
