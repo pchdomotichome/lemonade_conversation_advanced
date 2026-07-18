@@ -269,20 +269,28 @@ class LemonadeConversationEntity(
             )
         )
 
-        # Append technical prompt as system content
+        # Append technical prompt as system content, rendering its
+        # placeholders ({index}, {current_area}, {response_mode}, {time},
+        # {date}) so it behaves like MCP Assist's instruction block. Kept
+        # user-editable so behaviour tweaks don't require a code change.
         technical_prompt = options.get(CONF_TECHNICAL_PROMPT, "")
         if technical_prompt:
+            rendered_technical = await self._render_technical_prompt(
+                technical_prompt, options, now_local
+            )
             chat_log.content.append(
-                conversation.SystemContent(content=technical_prompt)
+                conversation.SystemContent(content=rendered_technical)
             )
 
-        # Append response mode instructions
-        response_mode = options.get(CONF_RESPONSE_MODE, DEFAULT_RESPONSE_MODE)
-        rm_instructions = RESPONSE_MODE_INSTRUCTIONS.get(response_mode)
-        if rm_instructions:
-            chat_log.content.append(
-                conversation.SystemContent(content=rm_instructions)
-            )
+        # Append response mode instructions (skipped when a technical
+        # prompt is present, since it already embeds {response_mode}).
+        if not technical_prompt:
+            response_mode = options.get(CONF_RESPONSE_MODE, DEFAULT_RESPONSE_MODE)
+            rm_instructions = RESPONSE_MODE_INSTRUCTIONS.get(response_mode)
+            if rm_instructions:
+                chat_log.content.append(
+                    conversation.SystemContent(content=rm_instructions)
+                )
 
         # Require confirmation before control actions if enabled
         confirmation_required = options.get(
@@ -795,6 +803,50 @@ class LemonadeConversationEntity(
             "initial_state",
         }
     )
+
+    async def _render_technical_prompt(
+        self,
+        template: str,
+        options: dict[str, Any],
+        now_local: Any,
+    ) -> str:
+        """Render the user-editable technical prompt with live placeholders.
+
+        Supports {index} (compact home index), {current_area},
+        {response_mode} (follow-up instruction block), {time}, {date}.
+        Unknown placeholders are left untouched so MCP-Assist-style
+        templates keep working.
+        """
+        index_manager = self.hass.data.get(DOMAIN, {}).get("index_manager")
+        index_text = ""
+        if index_manager:
+            index = await index_manager.get_index()
+            if index:
+                area_summary = ", ".join(
+                    f"{a['name']} ({a['entity_count']} ent.)"
+                    for a in index.get("areas", [])
+                )
+                domain_summary = ", ".join(
+                    f"{d} ({c})" for d, c in index.get("domains", {}).items()
+                )
+                index_text = f"Areas: {area_summary}\nDomains: {domain_summary}"
+
+        response_mode = options.get(CONF_RESPONSE_MODE, DEFAULT_RESPONSE_MODE)
+        rm_text = RESPONSE_MODE_INSTRUCTIONS.get(response_mode, "")
+
+        # Safe format: only substitute known placeholders and ignore
+        # KeyError for any the template doesn't use.
+        values = {
+            "index": index_text,
+            "current_area": "",
+            "response_mode": rm_text,
+            "time": now_local.strftime("%H:%M"),
+            "date": now_local.strftime("%d/%m/%Y"),
+        }
+        try:
+            return template.format(**values)
+        except (KeyError, IndexError, ValueError):
+            return template
 
     @staticmethod
     def _pretty_entity_name(
