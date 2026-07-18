@@ -822,7 +822,7 @@ class LemonadeConversationEntity(
         calling ``get_entity_state``.
         """
         if state_obj is None:
-            return f"- {entity_id} ({friendly}): unknown\n"
+            return f"- {friendly} ({entity_id}): unknown\n"
 
         # Climate entities have two temperature fields: "temperature" (set
         # point) and "current_temperature" (actual).  Rename the set point so
@@ -841,8 +841,8 @@ class LemonadeConversationEntity(
         extras = extras[:8]
 
         if extras:
-            return f"- {entity_id} ({friendly}): {state_obj.state} ({', '.join(extras)})\n"
-        return f"- {entity_id} ({friendly}): {state_obj.state}\n"
+            return f"- {friendly} ({entity_id}): {state_obj.state} ({', '.join(extras)})\n"
+        return f"- {friendly} ({entity_id}): {state_obj.state}\n"
 
     @staticmethod
     def _cleanup_stale_system_content(chat_log: conversation.ChatLog) -> None:
