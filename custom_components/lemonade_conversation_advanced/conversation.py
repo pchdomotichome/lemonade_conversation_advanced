@@ -601,6 +601,14 @@ class LemonadeConversationEntity(
             _LOGGER.debug(
                 "No area name found in prompt: %s", user_prompt[:100]
             )
+            # Fallback: a domain-scoped question with no area named
+            # (e.g. "how many lights are on?") still needs entity
+            # states. Inject all exposed entities of the hinted domain.
+            if domain_hint:
+                inserted = await self._inject_domain_states(
+                    chat_log, domain_hint, insert_idx
+                )
+                return inserted
             return insert_idx
 
         respect_exposure = bool(
@@ -701,6 +709,85 @@ class LemonadeConversationEntity(
             insert_idx += 1
 
         return insert_idx
+
+    async def _inject_domain_states(
+        self,
+        chat_log: conversation.ChatLog,
+        domain: str,
+        start_idx: int,
+    ) -> int:
+        """Inject states for ALL exposed entities of a domain (no-area fallback).
+
+        Used when the user asks a domain-scoped question without naming
+        an area (e.g. "how many lights are on?"). The model then
+        has the data inline and can answer without tool calls.
+        """
+        entity_registry = er.async_get(self.hass)
+        respect_exposure = bool(
+            self.subentry.data.get(
+                CONF_RESPECT_EXPOSURE, DEFAULT_RESPECT_EXPOSURE
+            )
+        )
+        enabled_domains = self.subentry.data.get(
+            CONF_ENABLED_DOMAINS, DEFAULT_ENABLED_DOMAINS
+        )
+        enabled_domains_set = (
+            set(enabled_domains) if enabled_domains else set()
+        )
+        entity_aliases = self.subentry.data.get(
+            CONF_ENTITY_ALIASES, DEFAULT_ENTITY_ALIASES
+        )
+
+        domain_entities = []
+        for e in entity_registry.entities.values():
+            if e.domain != domain:
+                continue
+            if enabled_domains_set and e.domain not in enabled_domains_set:
+                continue
+            if respect_exposure and not async_should_expose(
+                self.hass, "conversation", e.entity_id
+            ):
+                continue
+            domain_entities.append(e)
+
+        if not domain_entities:
+            _LOGGER.debug(
+                "No exposed entities for domain '%s' to inject", domain
+            )
+            return start_idx
+
+        entity_context = (
+            f"## Current states for all '{domain}' entities\n"
+            f"Use THIS data directly. DO NOT call get_entity_state or"
+            f" get_entities_in_area for these entities.\n"
+        )
+        for entity_entry in domain_entities:
+            state_obj = self.hass.states.get(entity_entry.entity_id)
+            if state_obj is None:
+                continue
+            friendly = (
+                entity_entry.name
+                or entity_entry.original_name
+                or entity_entry.entity_id
+            )
+            alias = entity_aliases.get(entity_entry.entity_id)
+            if alias:
+                friendly = f"{friendly} ({alias})"
+            entity_context += self._format_entity_state(
+                entity_entry.entity_id, friendly, state_obj
+            )
+
+        _LOGGER.debug(
+            "Injected %d '%s' entity states (%d chars)",
+            len(domain_entities),
+            domain,
+            len(entity_context),
+        )
+        chat_log.content.insert(
+            start_idx,
+            conversation.SystemContent(content=entity_context),
+        )
+        return start_idx + 1
 
     # Attribute keys that are metadata, not the entity's actual state/value.
     _STATE_METADATA_KEYS = frozenset(
