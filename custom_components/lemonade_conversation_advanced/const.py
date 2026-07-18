@@ -375,7 +375,7 @@ DEFAULT_OLLAMA_KEEP_ALIVE = "5m"  # 5 minutes
 DEFAULT_OLLAMA_NUM_CTX = 0  # 0 = use model default
 DEFAULT_FOLLOW_UP_PHRASES = "anything else, what else, would you, do you, should i, can i, which, how can, what about, is there"
 DEFAULT_END_WORDS = "stop, cancel, no, nope, thanks, thank you, bye, goodbye, done, never mind, nevermind, forget it, that's all, that's it"
-DEFAULT_CLEAN_RESPONSES = False
+DEFAULT_CLEAN_RESPONSES = True
 DEFAULT_TIMEOUT = 30
 
 # Context & entity customization defaults

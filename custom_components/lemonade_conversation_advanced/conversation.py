@@ -552,6 +552,25 @@ class LemonadeConversationEntity(
         cleaned = re.sub(r"<nik[^>]*>|</nik>", "", cleaned, flags=re.IGNORECASE)
         return cleaned, "\n".join(thinking_parts)
 
+    @staticmethod
+    def _clean_response(text: str) -> str:
+        """Strip markdown formatting so TTS reads clean text.
+
+        Removes **bold**, *italic*, `code` and heading markers; collapses
+        list bullets to plain text. Keeps the words intact.
+        """
+        # Bold/italic: **x** or *x* or __x__ — drop the markers, keep text
+        text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+        text = re.sub(r"__(.+?)__", r"\1", text)
+        text = re.sub(r"(?<!\*)\*(?!\*)(.+?)\*(?!\*)", r"\1", text)
+        # Inline code `x`
+        text = re.sub(r"`(.+?)`", r"\1", text)
+        # Markdown headings / bullets at line start
+        text = re.sub(r"^\s{0,3}#{1,6}\s+", "", text, flags=re.MULTILINE)
+        text = re.sub(r"^\s*[-*+]\s+", "", text, flags=re.MULTILINE)
+        text = re.sub(r"^\s*\d+\.\s+", "", text, flags=re.MULTILINE)
+        return text.strip()
+
     # ------------------------------------------------------------------ #
     #  Main handler                                                        #
     # ------------------------------------------------------------------ #
@@ -1239,6 +1258,8 @@ class LemonadeConversationEntity(
                 cleaned, thinking = self._extract_thinking(content_text)
                 content_text = cleaned
                 thinking_content = thinking or None
+                if options.get(CONF_CLEAN_RESPONSES, DEFAULT_CLEAN_RESPONSES):
+                    content_text = self._clean_response(content_text)
 
             if message.get("tool_calls"):
                 tool_inputs = [
