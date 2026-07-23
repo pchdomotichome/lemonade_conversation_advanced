@@ -548,5 +548,4 @@ DEFAULT_TECHNICAL_PROMPT = """You are a Home Assistant voice assistant with dire
 
 Current area: {current_area}
 Current time: {time}
-Current date: {date}
 Current date: {date}"""

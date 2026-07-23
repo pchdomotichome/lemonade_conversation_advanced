@@ -480,7 +480,7 @@ class LemonadeConversationEntity(
                 non_system_messages.append({
                     "role": "tool",
                     "tool_call_id": content.tool_call_id,
-                    "content": json.dumps(content.tool_result),
+                    "content": json.dumps(content.tool_result, default=str),
                 })
 
         # Trim history to last max_history turns (each "turn" is user+assistant+tools)
